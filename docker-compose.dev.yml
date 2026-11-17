@@ -1,0 +1,25 @@
+# Local dev overrides.
+# Run with:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# Volume mounts: add them on each service so code changes apply without a rebuild,
+# for example:
+#   movies:
+#     volumes:
+#       - ./backend/movies:/app
+#
+# Published DB ports: publish each database on localhost so you can connect
+# from a service running on the host, for example:
+#   movies-db:
+#     ports:
+#       - "5432:5432"
+# Every database needs a different host port (5432, 5433, ...).
+#
+# Running one service locally:
+# Start the rest with compose, then point that service's env URLs at
+# host.docker.internal (the host machine from inside a container).
+# On Linux, add this so the name resolves:
+#   extra_hosts:
+#     - "host.docker.internal:host-gateway"
+
+services: {}

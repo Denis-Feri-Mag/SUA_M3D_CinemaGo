@@ -1,0 +1,22 @@
+.env
+
+# Build outputs
+bin/
+obj/
+target/
+node_modules/
+__pycache__/
+.venv/
+dist/
+build/
+
+# IDE
+.idea/
+.vs/
+.vscode/
+
+# Logs and OS files
+logs/
+*.log
+.DS_Store
+Thumbs.db
