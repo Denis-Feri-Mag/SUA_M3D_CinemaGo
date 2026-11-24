@@ -1,20 +1,31 @@
 # Base compose file.
-# Add each service and its own database here, like the example below.
+# Add each service and its own database here, like the users example below.
 # Traefik (the gateway) comes in a later PR. Do not add it here yet.
-#
-# Example (remove this comment and add real services when they exist):
-#
-# services:
-#   movies:
-#     build: ./backend/movies
-#     env_file: .env
-#     depends_on:
-#       - movies-db
-#   movies-db:
-#     image: postgres:16-alpine
-#     environment:
-#       POSTGRES_DB: m3d_movies
-#       POSTGRES_USER: m3d_movies
-#       POSTGRES_PASSWORD: ${MOVIES_DB_PASSWORD}
 
-services: {}
+services:
+  users:
+    build: ./backend/users
+    environment:
+      PORT: 8080
+      DB_URL: postgres://m3d_users:${USERS_DB_PASSWORD}@users-db:5432/m3d_users
+      JWT_SECRET: ${JWT_SECRET}
+      NOTIFICATIONS_URL: ${NOTIFICATIONS_URL}
+    depends_on:
+      users-db:
+        condition: service_healthy
+
+  users-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: m3d_users
+      POSTGRES_USER: m3d_users
+      POSTGRES_PASSWORD: ${USERS_DB_PASSWORD}
+    volumes:
+      - users-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U m3d_users -d m3d_users"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  users-data:

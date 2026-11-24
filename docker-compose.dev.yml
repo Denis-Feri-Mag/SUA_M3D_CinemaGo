@@ -22,4 +22,10 @@
 #   extra_hosts:
 #     - "host.docker.internal:host-gateway"
 
-services: {}
+services:
+  users:
+    ports:
+      - "8081:8080"
+  users-db:
+    ports:
+      - "5432:5432"
