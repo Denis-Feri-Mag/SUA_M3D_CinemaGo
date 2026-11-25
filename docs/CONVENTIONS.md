@@ -30,6 +30,10 @@ Tickets and PRs use the same plain style:
 - Times in ISO 8601 UTC, like `2026-11-20T18:30:00Z`
 - Errors look like `{ "error": "movie not found" }` with the right status code
 
+## Running
+
+- Use `.\dev.ps1` (Windows) or `./dev.sh` (Mac/Linux) from the repo root, with `up`, `down`, `logs [service]`, `reset` or `ps`
+
 ## Gateway (Traefik)
 
 - The browser only talks to Traefik on http://localhost:8080, every service is under `/api/<service>`
