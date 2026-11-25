@@ -2,7 +2,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 
-use crate::models::ErrorResponse;
+use crate::models::responses::ErrorResponse;
 
 // Every handler returns this on failure, it becomes { "error": "..." }
 pub struct ApiError {

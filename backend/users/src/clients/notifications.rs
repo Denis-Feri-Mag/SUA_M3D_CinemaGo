@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::AppState;
+use crate::state::AppState;
 
 // Asks the notifications service (Mila) to send a welcome message.
 // If it is down we only log a warning, register still works.
@@ -17,7 +17,10 @@ pub async fn send_welcome(state: &AppState, user_id: i32, name: &str) {
             println!("welcome notification sent for user {user_id}");
         }
         Ok(response) => {
-            eprintln!("warning: notifications service answered {}", response.status());
+            eprintln!(
+                "warning: notifications service answered {}",
+                response.status()
+            );
         }
         Err(request_error) => {
             eprintln!("warning: could not reach notifications service: {request_error}");

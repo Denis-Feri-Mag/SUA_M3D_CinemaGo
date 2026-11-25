@@ -25,6 +25,16 @@ cargo run
 
 The table is created on startup.
 
+## Code layout
+
+- `src/main.rs` starts the service, `src/config.rs` reads env variables
+- `src/routes.rs` router, `src/openapi.rs` Swagger spec
+- `src/handlers/` endpoint handlers
+- `src/models/` database struct, requests and responses
+- `src/db/` connection pool, table creation and SQL queries
+- `src/auth/` passwords, JWT and the logged in user check
+- `src/clients/` calls to other services
+
 ## Env variables
 
 | Name              | What it is                                  |

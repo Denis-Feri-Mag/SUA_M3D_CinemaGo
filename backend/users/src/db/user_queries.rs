@@ -1,34 +1,6 @@
-use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
-use crate::models::UserRow;
-
-pub async fn connect(database_url: &str) -> PgPool {
-    // One pool shared by all requests
-    PgPoolOptions::new()
-        .max_connections(5)
-        .connect(database_url)
-        .await
-        .expect("could not connect to the database")
-}
-
-// Simple migration, runs on every start
-pub async fn create_tables(pool: &PgPool) {
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            role TEXT NOT NULL DEFAULT 'user',
-            token_version INTEGER NOT NULL DEFAULT 0,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )",
-    )
-    .execute(pool)
-    .await
-    .expect("could not create the users table");
-}
+use crate::models::user::UserRow;
 
 pub async fn get_all_users(pool: &PgPool) -> Result<Vec<UserRow>, sqlx::Error> {
     sqlx::query_as::<_, UserRow>("SELECT * FROM users ORDER BY id")
@@ -88,7 +60,11 @@ pub async fn update_user(
         .await
 }
 
-pub async fn update_role(pool: &PgPool, user_id: i32, role: &str) -> Result<Option<UserRow>, sqlx::Error> {
+pub async fn update_role(
+    pool: &PgPool,
+    user_id: i32,
+    role: &str,
+) -> Result<Option<UserRow>, sqlx::Error> {
     sqlx::query_as::<_, UserRow>("UPDATE users SET role = $1 WHERE id = $2 RETURNING *")
         .bind(role)
         .bind(user_id)
