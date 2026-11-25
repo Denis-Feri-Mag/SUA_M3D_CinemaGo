@@ -1,8 +1,10 @@
+use axum::http::StatusCode;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::{Config, SwaggerUi};
 
+use crate::errors::ApiError;
 use crate::handlers::{auth_handlers, health, user_handlers};
 use crate::openapi::ApiDoc;
 use crate::state::AppState;
@@ -29,5 +31,11 @@ pub fn create_router(state: AppState) -> Router {
                 .url("/openapi.json", ApiDoc::openapi())
                 .config(Config::new(["../openapi.json"])),
         )
+        // Unknown paths also get a JSON error
+        .fallback(not_found)
         .with_state(state)
+}
+
+async fn not_found() -> ApiError {
+    ApiError::new(StatusCode::NOT_FOUND, "not found")
 }

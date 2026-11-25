@@ -1,12 +1,12 @@
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
-use axum::Json;
 
 use crate::auth::{current_user, jwt, password, refresh_token};
 use crate::cache::user_cache;
 use crate::clients::notifications;
 use crate::db::{refresh_token_queries, user_queries};
 use crate::errors::ApiError;
+use crate::extractors::{Json, Path};
 use crate::models::requests::{LoginRequest, RefreshRequest, RegisterRequest};
 use crate::models::responses::{ErrorResponse, LoginResponse, RefreshResponse, UserResponse};
 use crate::state::AppState;
