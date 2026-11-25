@@ -46,6 +46,8 @@ services:
       CACHE_TTL_SECONDS: 300
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-10}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
     # Traefik only sends requests to users when this passes
     # wget is part of alpine, 127.0.0.1 because localhost can be IPv6
     healthcheck:

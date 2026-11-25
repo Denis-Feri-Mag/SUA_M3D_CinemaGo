@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 use axum::routing::{delete, get, post, put};
-use axum::Router;
+use axum::{middleware, Router};
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::Level;
 use utoipa::OpenApi;
@@ -9,15 +9,24 @@ use utoipa_swagger_ui::{Config, SwaggerUi};
 use crate::errors::ApiError;
 use crate::handlers::{auth_handlers, health, user_handlers};
 use crate::openapi::ApiDoc;
+use crate::rate_limit;
 use crate::state::AppState;
 
 pub fn create_router(state: AppState) -> Router {
-    Router::new()
-        .route("/health", get(health::health))
-        .route("/users", get(user_handlers::get_users))
+    // Public auth routes get a rate limit against password guessing and spam
+    let rate_limited_routes = Router::new()
         .route("/users/register", post(auth_handlers::register))
         .route("/users/login", post(auth_handlers::login))
         .route("/users/refresh", post(auth_handlers::refresh))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit::limit_requests,
+        ));
+
+    Router::new()
+        .route("/health", get(health::health))
+        .route("/users", get(user_handlers::get_users))
+        .merge(rate_limited_routes)
         .route(
             "/users/{id}",
             get(user_handlers::get_user)

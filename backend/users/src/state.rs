@@ -1,5 +1,9 @@
+use std::sync::Arc;
+
 use redis::aio::ConnectionManager;
 use sqlx::PgPool;
+
+use crate::rate_limit::RateLimiter;
 
 // Shared by all handlers
 #[derive(Clone)]
@@ -12,4 +16,5 @@ pub struct AppState {
     // None when Valkey is not running
     pub cache: Option<ConnectionManager>,
     pub cache_ttl_seconds: u64,
+    pub rate_limiter: Arc<RateLimiter>,
 }

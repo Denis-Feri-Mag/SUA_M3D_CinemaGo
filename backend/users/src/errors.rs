@@ -50,12 +50,29 @@ impl From<validator::ValidationErrors> for ApiError {
                     Some(message) => message.to_string(),
                     None => "is not valid".to_string(),
                 };
-                messages.push(format!("{field}: {text}"));
+                messages.push(format!("{}: {text}", camel_case(&field)));
             }
         }
         messages.sort();
         ApiError::new(StatusCode::BAD_REQUEST, &messages.join(", "))
     }
+}
+
+// new_password becomes newPassword, like the field names in the JSON body
+fn camel_case(field: &str) -> String {
+    let mut result = String::new();
+    let mut next_upper = false;
+    for character in field.chars() {
+        if character == '_' {
+            next_upper = true;
+        } else if next_upper {
+            result.push(character.to_ascii_uppercase());
+            next_upper = false;
+        } else {
+            result.push(character);
+        }
+    }
+    result
 }
 
 // Bad query string, for example ?page=abc
@@ -75,5 +92,16 @@ impl From<sqlx::Error> for ApiError {
         }
         eprintln!("database error: {database_error}");
         ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "database error")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::camel_case;
+
+    #[test]
+    fn field_names_are_camel_case() {
+        assert_eq!(camel_case("new_password"), "newPassword");
+        assert_eq!(camel_case("email"), "email");
     }
 }
