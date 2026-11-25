@@ -1,36 +1,112 @@
-# Local dev overrides.
-# Run with:
-#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# Local dev overrides, published ports for testing.
+# Run with .\dev.ps1 or ./dev.sh (same as
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build)
 #
-# Volume mounts: add them on each service so code changes apply without a rebuild,
-# for example:
-#   movies:
-#     volumes:
-#       - ./backend/movies:/app
+# Internal networks cannot publish ports, so in dev every service
+# and database also joins the normal "dev" network.
+# Uncomment your service and database below when you enable them in docker-compose.yml.
 #
-# Published DB ports: publish each database on localhost so you can connect
-# from a service running on the host, for example:
-#   movies-db:
-#     ports:
-#       - "5432:5432"
-# Every database needs a different host port (5432, 5433, ...).
-#
-# Running one service locally:
-# Start the rest with compose, then point that service's env URLs at
-# host.docker.internal (the host machine from inside a container).
-# On Linux, add this so the name resolves:
-#   extra_hosts:
-#     - "host.docker.internal:host-gateway"
+# extra_hosts lets containers reach services running locally on your machine
+# as host.docker.internal (needed on Linux, Docker Desktop has it built in).
 
 services:
   # Traefik dashboard on http://localhost:8090
   traefik:
     ports:
       - "8090:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   users:
     ports:
       - "8081:8080"
+    networks:
+      - dev
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   users-db:
     ports:
       - "5432:5432"
+    networks:
+      - dev
+
+  # movies:
+  #   ports:
+  #     - "8082:8080"
+  #   networks:
+  #     - dev
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  # movies-db:
+  #   ports:
+  #     - "5433:5432"
+  #   networks:
+  #     - dev
+
+  # screenings:
+  #   ports:
+  #     - "8083:8080"
+  #   networks:
+  #     - dev
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  # screenings-db:
+  #   ports:
+  #     - "5434:5432"
+  #   networks:
+  #     - dev
+
+  # reservations:
+  #   ports:
+  #     - "8084:8080"
+  #   networks:
+  #     - dev
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  # reservations-db:
+  #   ports:
+  #     - "5435:5432"
+  #   networks:
+  #     - dev
+
+  # payments:
+  #   ports:
+  #     - "8085:8080"
+  #   networks:
+  #     - dev
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  # payments-db:
+  #   ports:
+  #     - "5436:5432"
+  #   networks:
+  #     - dev
+
+  # reviews:
+  #   ports:
+  #     - "8086:8080"
+  #   networks:
+  #     - dev
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  # reviews-db:
+  #   ports:
+  #     - "5437:5432"
+  #   networks:
+  #     - dev
+
+  # notifications:
+  #   ports:
+  #     - "8087:8080"
+  #   networks:
+  #     - dev
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  # notifications-db:
+  #   ports:
+  #     - "5438:5432"
+  #   networks:
+  #     - dev
+
+networks:
+  dev:

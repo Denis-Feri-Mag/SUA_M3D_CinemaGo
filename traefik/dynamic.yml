@@ -1,0 +1,17 @@
+# Shared Traefik middlewares, every service can use them in its labels as auth@file and strip-api@file
+http:
+  middlewares:
+    # auth: asks users if the token is valid and passes X-User-Id and X-User-Role on
+    # AUTH_URL is set in docker-compose.yml (changes when users runs locally)
+    auth:
+      forwardAuth:
+        address: '{{ env "AUTH_URL" }}'
+        authResponseHeaders:
+          - X-User-Id
+          - X-User-Role
+
+    # strip-api: /api/movies/1 becomes /movies/1
+    strip-api:
+      stripPrefix:
+        prefixes:
+          - /api
