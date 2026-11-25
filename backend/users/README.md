@@ -37,12 +37,13 @@ The table is created on startup.
 
 ## Env variables
 
-| Name              | What it is                                  |
-|-------------------|---------------------------------------------|
-| PORT              | Port the service listens on                 |
-| DB_URL            | Postgres connection string for m3d_users    |
-| JWT_SECRET        | Secret used to sign tokens                  |
-| NOTIFICATIONS_URL | Base URL of the notifications service       |
+| Name                 | What it is                                  |
+|----------------------|---------------------------------------------|
+| PORT                 | Port the service listens on                 |
+| DB_URL               | Postgres connection string for m3d_users    |
+| JWT_SECRET           | Secret used to sign tokens                  |
+| NOTIFICATIONS_URL    | Base URL of the notifications service       |
+| ACCESS_TOKEN_MINUTES | How long an access token lasts (default 15) |
 
 ## Endpoints
 
@@ -52,7 +53,8 @@ The table is created on startup.
 | GET    | /users                | admin         | List all users                        |
 | GET    | /users/{id}           | no            | Get one user                          |
 | POST   | /users/register       | no            | Create a user (201)                   |
-| POST   | /users/login          | no            | Returns a JWT                         |
+| POST   | /users/login          | no            | Returns access and refresh token      |
+| POST   | /users/refresh        | no            | New access and refresh token          |
 | PUT    | /users/{id}           | self or admin | Change name and email                 |
 | PUT    | /users/{id}/role      | admin         | Set role to `user` or `admin`         |
 | DELETE | /users/{id}           | self or admin | Delete the user (204)                 |
@@ -60,6 +62,9 @@ The table is created on startup.
 | GET    | /auth/verify          | any user      | Token check used by Traefik           |
 
 Send the token as `Authorization: Bearer <token>`.
+The access token lasts 15 minutes. When it expires, send `{ refreshToken }` to `/users/refresh`.
+Each refresh token works once and lasts 7 days. Only its sha256 hash is saved in the `refresh_tokens` table.
+Logout and deleting a user also remove the user's refresh tokens.
 `/auth/verify` returns 200 with `X-User-Id` and `X-User-Role` headers, or 401.
 The first registered user becomes admin.
 Passwords are hashed with argon2 and are never returned.

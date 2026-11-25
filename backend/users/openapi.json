@@ -148,7 +148,7 @@
         },
         "responses": {
           "200": {
-            "description": "Logged in, returns a JWT",
+            "description": "Logged in, returns an access token and a refresh token",
             "content": {
               "application/json": {
                 "schema": {
@@ -159,6 +159,46 @@
           },
           "401": {
             "description": "Wrong email or password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/refresh": {
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "refresh",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "New access token and new refresh token, the old refresh token stops working",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Refresh token is invalid, used or expired",
             "content": {
               "application/json": {
                 "schema": {
@@ -522,7 +562,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Logged out, all old tokens stop working"
+            "description": "Logged out, all old access and refresh tokens stop working"
           },
           "401": {
             "description": "Missing or invalid token",
@@ -606,14 +646,44 @@
         "type": "object",
         "required": [
           "token",
+          "refreshToken",
           "user"
         ],
         "properties": {
+          "refreshToken": {
+            "type": "string"
+          },
           "token": {
             "type": "string"
           },
           "user": {
             "$ref": "#/components/schemas/UserResponse"
+          }
+        }
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "required": [
+          "refreshToken"
+        ],
+        "properties": {
+          "refreshToken": {
+            "type": "string"
+          }
+        }
+      },
+      "RefreshResponse": {
+        "type": "object",
+        "required": [
+          "token",
+          "refreshToken"
+        ],
+        "properties": {
+          "refreshToken": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
           }
         }
       },
