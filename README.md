@@ -20,14 +20,14 @@ On Linux, compose needs `extra_hosts: ["host.docker.internal:host-gateway"]` for
 
 | Service                | Folder                | Port | Owner    | Git user |
 |------------------------|-----------------------|------|----------|----------|
-| users                  | backend/users         | TBD  | TBD      | TBD      |
-| movies                 | backend/movies        | TBD  | TBD      | TBD      |
-| screenings             | backend/screenings    | TBD  | TBD      | TBD      |
-| reservations           | backend/reservations  | TBD  | TBD      | TBD      |
-| payments               | backend/payments      | TBD  | TBD      | TBD      |
-| reviews                | backend/reviews       | TBD  | TBD      | TBD      |
-| notifications          | backend/notifications | TBD  | TBD      | TBD      |
-| frontend               | frontend              | TBD  | TBD      | TBD      |
+| users                  | backend/users         | TBD  | Denis    | TBD      |
+| movies                 | backend/movies        | TBD  | Marija   | TBD      |
+| screenings             | backend/screenings    | TBD  | Matea    | TBD      |
+| reservations           | backend/reservations  | TBD  | Denis    | TBD      |
+| payments               | backend/payments      | TBD  | Matea    | TBD      |
+| reviews                | backend/reviews       | TBD  | Mila     | TBD      |
+| notifications          | backend/notifications | TBD  | Mila     | TBD      |
+| frontend               | frontend              | TBD  | Marija   | TBD      |
 | gateway, docs, compose |                       |      | everyone | everyone |
 
 More info is in [docs/CONVENTIONS.md](docs/CONVENTIONS.md) and in each service's own README.
