@@ -89,3 +89,19 @@ pub async fn increase_token_version(pool: &PgPool, user_id: i32) -> Result<bool,
         .await?;
     Ok(result.rows_affected() > 0)
 }
+
+// New password and a new token version, so all old tokens stop working
+pub async fn update_password(
+    pool: &PgPool,
+    user_id: i32,
+    password_hash: &str,
+) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query(
+        "UPDATE users SET password_hash = $1, token_version = token_version + 1 WHERE id = $2",
+    )
+    .bind(password_hash)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected() > 0)
+}

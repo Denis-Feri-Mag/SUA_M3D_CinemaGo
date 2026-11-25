@@ -7,7 +7,9 @@ use crate::clients::notifications;
 use crate::db::{refresh_token_queries, user_queries};
 use crate::errors::ApiError;
 use crate::extractors::{Json, Path};
-use crate::models::requests::{LoginRequest, RefreshRequest, RegisterRequest};
+use crate::models::requests::{
+    ChangePasswordRequest, LoginRequest, RefreshRequest, RegisterRequest,
+};
 use crate::models::responses::{ErrorResponse, LoginResponse, RefreshResponse, UserResponse};
 use crate::state::AppState;
 
@@ -199,4 +201,47 @@ pub async fn verify(
         ("X-User-Role", logged_in_user.role.clone()),
     ];
     Ok((StatusCode::OK, user_headers))
+}
+
+#[utoipa::path(
+    put,
+    path = "/users/me/password",
+    tag = "users",
+    security(("bearerAuth" = [])),
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 204, description = "Password changed, log in again because old tokens stop working"),
+        (status = 400, description = "New password too short", body = ErrorResponse),
+        (status = 401, description = "Missing or invalid token, or wrong old password", body = ErrorResponse)
+    )
+)]
+pub async fn change_password(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<ChangePasswordRequest>,
+) -> Result<StatusCode, ApiError> {
+    let logged_in_user = current_user::get_logged_in_user(&headers, &state).await?;
+
+    // The cached user has no password hash, so read it from the database
+    let user = user_queries::get_user_by_id(&state.pool, logged_in_user.id)
+        .await?
+        .ok_or(ApiError::unauthorized())?;
+    if !password::verify_password(&request.old_password, &user.password_hash) {
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "old password is wrong",
+        ));
+    }
+    if request.new_password.len() < 6 {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "password must have at least 6 characters",
+        ));
+    }
+
+    let password_hash = password::hash_password(&request.new_password);
+    user_queries::update_password(&state.pool, user.id, &password_hash).await?;
+    refresh_token_queries::delete_refresh_tokens_for_user(&state.pool, user.id).await?;
+    user_cache::remove_user(&state, user.id).await;
+    Ok(StatusCode::NO_CONTENT)
 }

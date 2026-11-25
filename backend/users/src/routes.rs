@@ -24,6 +24,7 @@ pub fn create_router(state: AppState) -> Router {
         )
         .route("/users/{id}/role", put(user_handlers::update_role))
         .route("/users/{id}/sessions", delete(auth_handlers::logout))
+        .route("/users/me/password", put(auth_handlers::change_password))
         .route("/auth/verify", get(auth_handlers::verify))
         // Relative spec url so Swagger also works behind Traefik on /api/users/docs/
         .merge(

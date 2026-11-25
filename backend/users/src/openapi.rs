@@ -21,6 +21,7 @@ use crate::handlers::{auth_handlers, health, user_handlers};
         user_handlers::update_role,
         user_handlers::delete_user,
         auth_handlers::logout,
+        auth_handlers::change_password,
         auth_handlers::verify
     ),
     modifiers(&BearerAuth)

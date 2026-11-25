@@ -62,6 +62,7 @@ The table is created on startup.
 | PUT    | /users/{id}/role      | admin         | Set role to `user` or `admin`         |
 | DELETE | /users/{id}           | self or admin | Delete the user (204)                 |
 | DELETE | /users/{id}/sessions  | self or admin | Logout, all old tokens stop working   |
+| PUT    | /users/me/password    | any user      | Change password, logs out everywhere  |
 | GET    | /auth/verify          | any user      | Token check used by Traefik           |
 
 Send the token as `Authorization: Bearer <token>`.
