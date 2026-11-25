@@ -19,3 +19,7 @@ dotenvy = "0.15"
 sha2 = "0.10"
 hex = "0.4"
 redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

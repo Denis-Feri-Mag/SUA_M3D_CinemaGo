@@ -85,6 +85,20 @@ If Valkey is not running, the service logs a warning and reads from the database
 After register the service calls `POST {NOTIFICATIONS_URL}/notifications` with `{ userId, type: "welcome", message }`.
 If notifications is not running, it only logs a warning and register still works.
 
+## Tests
+
+```powershell
+cargo test
+```
+
+Unit tests cover passwords, JWT and refresh tokens. Endpoint tests in `src/endpoint_tests.rs` call the router directly and do not need a database.
+One test needs the dev database (start it with the dev menu first):
+
+```powershell
+$env:TEST_DB_URL = "postgres://m3d_users:changeme@localhost:5432/m3d_users"
+cargo test -- --ignored
+```
+
 ## OpenAPI
 
 The spec is served on `/openapi.json`. The same spec is saved in `openapi.json` in this folder.

@@ -10,6 +10,9 @@ mod openapi;
 mod routes;
 mod state;
 
+#[cfg(test)]
+mod endpoint_tests;
+
 use std::time::Duration;
 
 use config::Config;
