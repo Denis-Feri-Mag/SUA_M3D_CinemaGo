@@ -17,6 +17,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  # Also print direct ports, databases and caches
+  info:
+    environment:
+      DEV_PORTS: "true"
+
   users:
     ports:
       - "8081:8080"
