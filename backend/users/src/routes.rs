@@ -28,6 +28,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/users", get(user_handlers::get_users))
         .merge(rate_limited_routes)
         .route(
+            "/users/me",
+            get(user_handlers::get_me).put(user_handlers::update_me),
+        )
+        .route(
             "/users/{id}",
             get(user_handlers::get_user)
                 .put(user_handlers::update_user)

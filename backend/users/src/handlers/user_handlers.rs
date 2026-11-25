@@ -197,6 +197,58 @@ pub async fn delete_user(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    get,
+    path = "/users/me",
+    tag = "users",
+    security(("bearerAuth" = [])),
+    responses(
+        (status = 200, description = "The logged in user", body = UserResponse),
+        (status = 401, description = "Missing or invalid token", body = ErrorResponse)
+    )
+)]
+pub async fn get_me(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<UserResponse>, ApiError> {
+    let logged_in_user = current_user::get_logged_in_user(&headers, &state).await?;
+    Ok(Json(logged_in_user.to_response()))
+}
+
+#[utoipa::path(
+    put,
+    path = "/users/me",
+    tag = "users",
+    security(("bearerAuth" = [])),
+    request_body = UpdateUserRequest,
+    responses(
+        (status = 200, description = "Profile updated", body = UserResponse),
+        (status = 400, description = "Invalid name or email", body = ErrorResponse),
+        (status = 401, description = "Missing or invalid token", body = ErrorResponse),
+        (status = 409, description = "Email already exists", body = ErrorResponse)
+    )
+)]
+pub async fn update_me(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<UpdateUserRequest>,
+) -> Result<Json<UserResponse>, ApiError> {
+    let logged_in_user = current_user::get_logged_in_user(&headers, &state).await?;
+
+    request.validate()?;
+    let name = request.name.trim();
+    let email = request.email.trim().to_lowercase();
+    if name.is_empty() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "name: is required"));
+    }
+
+    let user = user_queries::update_user(&state.pool, logged_in_user.id, name, &email)
+        .await?
+        .ok_or(ApiError::not_found())?;
+    user_cache::remove_user(&state, logged_in_user.id).await;
+    Ok(Json(user.to_response()))
+}
+
 // The app always needs one admin, so the last one cannot be deleted or made a normal user
 async fn check_not_last_admin(state: &AppState, user_id: i32) -> Result<(), ApiError> {
     let user = match user_queries::get_user_by_id(&state.pool, user_id).await? {
