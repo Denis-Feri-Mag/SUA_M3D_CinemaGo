@@ -1,3 +1,4 @@
+pub mod refresh_token_queries;
 pub mod user_queries;
 
 use sqlx::postgres::PgPoolOptions;
@@ -28,4 +29,18 @@ pub async fn create_tables(pool: &PgPool) {
     .execute(pool)
     .await
     .expect("could not create the users table");
+
+    // Refresh tokens are removed together with their user
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS refresh_tokens (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token_hash TEXT NOT NULL UNIQUE,
+            expires_at TIMESTAMPTZ NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+    )
+    .execute(pool)
+    .await
+    .expect("could not create the refresh_tokens table");
 }

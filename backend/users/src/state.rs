@@ -6,5 +6,6 @@ pub struct AppState {
     pub pool: PgPool,
     pub jwt_secret: String,
     pub notifications_url: String,
+    pub access_token_minutes: i64,
     pub http_client: reqwest::Client,
 }

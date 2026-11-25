@@ -6,6 +6,7 @@ pub struct Config {
     pub database_url: String,
     pub jwt_secret: String,
     pub notifications_url: String,
+    pub access_token_minutes: i64,
 }
 
 impl Config {
@@ -18,6 +19,10 @@ impl Config {
             jwt_secret: env::var("JWT_SECRET").expect("JWT_SECRET is not set"),
             notifications_url: env::var("NOTIFICATIONS_URL")
                 .unwrap_or("http://notifications:8080".to_string()),
+            access_token_minutes: env::var("ACCESS_TOKEN_MINUTES")
+                .unwrap_or("15".to_string())
+                .parse()
+                .expect("ACCESS_TOKEN_MINUTES must be a number"),
         }
     }
 }

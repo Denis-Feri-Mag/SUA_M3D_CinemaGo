@@ -16,6 +16,7 @@ use crate::handlers::{auth_handlers, health, user_handlers};
         user_handlers::get_user,
         auth_handlers::register,
         auth_handlers::login,
+        auth_handlers::refresh,
         user_handlers::update_user,
         user_handlers::update_role,
         user_handlers::delete_user,

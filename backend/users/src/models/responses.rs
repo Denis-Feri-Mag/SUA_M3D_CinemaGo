@@ -17,7 +17,15 @@ pub struct UserResponse {
 #[serde(rename_all = "camelCase")]
 pub struct LoginResponse {
     pub token: String,
+    pub refresh_token: String,
     pub user: UserResponse,
+}
+
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RefreshResponse {
+    pub token: String,
+    pub refresh_token: String,
 }
 
 #[derive(Serialize, ToSchema)]

@@ -30,6 +30,7 @@ async fn main() {
         pool,
         jwt_secret: config.jwt_secret,
         notifications_url: config.notifications_url,
+        access_token_minutes: config.access_token_minutes,
         http_client,
     };
 

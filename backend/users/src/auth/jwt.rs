@@ -15,10 +15,10 @@ pub struct Claims {
     pub exp: usize,
 }
 
-pub fn create_token(user: &UserRow, jwt_secret: &str) -> String {
-    // Token is valid for 24 hours
+pub fn create_token(user: &UserRow, jwt_secret: &str, valid_minutes: i64) -> String {
+    // Short lived access token, the client gets a new one with the refresh token
     let issued_at = chrono::Utc::now();
-    let expires_at = issued_at + chrono::Duration::hours(24);
+    let expires_at = issued_at + chrono::Duration::minutes(valid_minutes);
     let claims = Claims {
         sub: user.id.to_string(),
         name: user.name.clone(),

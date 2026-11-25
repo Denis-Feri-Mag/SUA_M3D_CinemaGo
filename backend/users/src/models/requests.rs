@@ -18,6 +18,12 @@ pub struct LoginRequest {
 
 #[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct RefreshRequest {
+    pub refresh_token: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateUserRequest {
     pub name: String,
     pub email: String,

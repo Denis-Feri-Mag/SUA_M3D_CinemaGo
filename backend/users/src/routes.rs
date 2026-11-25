@@ -13,6 +13,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/users", get(user_handlers::get_users))
         .route("/users/register", post(auth_handlers::register))
         .route("/users/login", post(auth_handlers::login))
+        .route("/users/refresh", post(auth_handlers::refresh))
         .route(
             "/users/{id}",
             get(user_handlers::get_user)

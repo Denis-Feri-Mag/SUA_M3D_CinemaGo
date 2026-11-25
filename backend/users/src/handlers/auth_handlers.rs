@@ -2,12 +2,12 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
 
-use crate::auth::{current_user, jwt, password};
+use crate::auth::{current_user, jwt, password, refresh_token};
 use crate::clients::notifications;
-use crate::db::user_queries;
+use crate::db::{refresh_token_queries, user_queries};
 use crate::errors::ApiError;
-use crate::models::requests::{LoginRequest, RegisterRequest};
-use crate::models::responses::{ErrorResponse, LoginResponse, UserResponse};
+use crate::models::requests::{LoginRequest, RefreshRequest, RegisterRequest};
+use crate::models::responses::{ErrorResponse, LoginResponse, RefreshResponse, UserResponse};
 use crate::state::AppState;
 
 #[utoipa::path(
@@ -59,7 +59,7 @@ pub async fn register(
     tag = "users",
     request_body = LoginRequest,
     responses(
-        (status = 200, description = "Logged in, returns a JWT", body = LoginResponse),
+        (status = 200, description = "Logged in, returns an access token and a refresh token", body = LoginResponse),
         (status = 401, description = "Wrong email or password", body = ErrorResponse)
     )
 )]
@@ -79,11 +79,64 @@ pub async fn login(
         return Err(wrong_login);
     }
 
-    let token = jwt::create_token(&user, &state.jwt_secret);
+    let token = jwt::create_token(&user, &state.jwt_secret, state.access_token_minutes);
+    let new_refresh_token = create_refresh_token(&state, user.id).await?;
     Ok(Json(LoginResponse {
         token,
+        refresh_token: new_refresh_token,
         user: user.to_response(),
     }))
+}
+
+#[utoipa::path(
+    post,
+    path = "/users/refresh",
+    tag = "users",
+    request_body = RefreshRequest,
+    responses(
+        (status = 200, description = "New access token and new refresh token, the old refresh token stops working", body = RefreshResponse),
+        (status = 401, description = "Refresh token is invalid, used or expired", body = ErrorResponse)
+    )
+)]
+pub async fn refresh(
+    State(state): State<AppState>,
+    Json(request): Json<RefreshRequest>,
+) -> Result<Json<RefreshResponse>, ApiError> {
+    let invalid_token = ApiError::new(StatusCode::UNAUTHORIZED, "invalid refresh token");
+
+    // The old token is deleted here, so it cannot be used again
+    let token_hash = refresh_token::hash_refresh_token(&request.refresh_token);
+    let saved_token =
+        match refresh_token_queries::take_refresh_token(&state.pool, &token_hash).await? {
+            Some(saved_token) => saved_token,
+            None => return Err(invalid_token),
+        };
+
+    if saved_token.expires_at < chrono::Utc::now() {
+        return Err(invalid_token);
+    }
+
+    let user = match user_queries::get_user_by_id(&state.pool, saved_token.user_id).await? {
+        Some(user) => user,
+        None => return Err(invalid_token),
+    };
+
+    let token = jwt::create_token(&user, &state.jwt_secret, state.access_token_minutes);
+    let new_refresh_token = create_refresh_token(&state, user.id).await?;
+    Ok(Json(RefreshResponse {
+        token,
+        refresh_token: new_refresh_token,
+    }))
+}
+
+// Creates a refresh token valid for 7 days and saves its hash
+async fn create_refresh_token(state: &AppState, user_id: i32) -> Result<String, ApiError> {
+    let new_refresh_token = refresh_token::generate_refresh_token();
+    let token_hash = refresh_token::hash_refresh_token(&new_refresh_token);
+    let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
+    refresh_token_queries::insert_refresh_token(&state.pool, user_id, &token_hash, expires_at)
+        .await?;
+    Ok(new_refresh_token)
 }
 
 #[utoipa::path(
@@ -93,7 +146,7 @@ pub async fn login(
     security(("bearerAuth" = [])),
     params(("id" = i32, Path, description = "User id")),
     responses(
-        (status = 204, description = "Logged out, all old tokens stop working"),
+        (status = 204, description = "Logged out, all old access and refresh tokens stop working"),
         (status = 401, description = "Missing or invalid token", body = ErrorResponse),
         (status = 403, description = "Not your account", body = ErrorResponse),
         (status = 404, description = "User not found", body = ErrorResponse)
@@ -111,6 +164,7 @@ pub async fn logout(
     if !was_updated {
         return Err(ApiError::not_found());
     }
+    refresh_token_queries::delete_refresh_tokens_for_user(&state.pool, user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
