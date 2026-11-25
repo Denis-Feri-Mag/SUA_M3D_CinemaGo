@@ -2278,6 +2278,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "hex",
+ "http-body-util",
  "jsonwebtoken",
  "redis",
  "reqwest",
@@ -2286,6 +2287,7 @@ dependencies = [
  "sha2 0.10.9",
  "sqlx",
  "tokio",
+ "tower",
  "utoipa",
  "utoipa-swagger-ui",
 ]

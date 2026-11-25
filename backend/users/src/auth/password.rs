@@ -19,3 +19,31 @@ pub fn verify_password(password: &str, password_hash: &str) -> bool {
         .verify_password(password.as_bytes(), &parsed_hash)
         .is_ok()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn correct_password_is_accepted() {
+        let password_hash = hash_password("secret123");
+        assert!(verify_password("secret123", &password_hash));
+    }
+
+    #[test]
+    fn wrong_password_is_rejected() {
+        let password_hash = hash_password("secret123");
+        assert!(!verify_password("wrong-password", &password_hash));
+    }
+
+    #[test]
+    fn same_password_gives_different_hashes() {
+        // Each hash has its own random salt
+        assert_ne!(hash_password("secret123"), hash_password("secret123"));
+    }
+
+    #[test]
+    fn broken_hash_is_rejected() {
+        assert!(!verify_password("secret123", "not-a-real-hash"));
+    }
+}
