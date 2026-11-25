@@ -8,18 +8,23 @@ use crate::models::user::UserRow;
 #[serde(rename_all = "camelCase")]
 pub struct Claims {
     pub sub: String,
+    pub name: String,
     pub role: String,
     pub token_version: i32,
+    pub iat: usize,
     pub exp: usize,
 }
 
 pub fn create_token(user: &UserRow, jwt_secret: &str) -> String {
     // Token is valid for 24 hours
-    let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
+    let issued_at = chrono::Utc::now();
+    let expires_at = issued_at + chrono::Duration::hours(24);
     let claims = Claims {
         sub: user.id.to_string(),
+        name: user.name.clone(),
         role: user.role.clone(),
         token_version: user.token_version,
+        iat: issued_at.timestamp() as usize,
         exp: expires_at.timestamp() as usize,
     };
     encode(
