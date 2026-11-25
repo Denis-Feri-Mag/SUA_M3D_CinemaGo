@@ -60,6 +60,8 @@ The table is created on startup.
 | GET    | /health               | no            | Health check                          |
 | GET    | /users                | admin         | List users, `?page=1&pageSize=20`     |
 | GET    | /users/{id}           | no            | Get one user                          |
+| GET    | /users/me             | any user      | The logged in user                    |
+| PUT    | /users/me             | any user      | Change your own name and email        |
 | POST   | /users/register       | no            | Create a user (201)                   |
 | POST   | /users/login          | no            | Returns access and refresh token      |
 | POST   | /users/refresh        | no            | New access and refresh token          |
