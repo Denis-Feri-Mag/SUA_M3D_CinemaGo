@@ -6,6 +6,10 @@ use crate::handlers::{auth_handlers, health, user_handlers};
 #[derive(OpenApi)]
 #[openapi(
     info(title = "CinemaGo users service", version = "1.0.0"),
+    servers(
+        (url = "/", description = "Direct to the users service"),
+        (url = "/api", description = "Through the Traefik gateway")
+    ),
     paths(
         health::health,
         user_handlers::get_users,
@@ -15,7 +19,8 @@ use crate::handlers::{auth_handlers, health, user_handlers};
         user_handlers::update_user,
         user_handlers::update_role,
         user_handlers::delete_user,
-        auth_handlers::logout
+        auth_handlers::logout,
+        auth_handlers::verify
     ),
     modifiers(&BearerAuth)
 )]

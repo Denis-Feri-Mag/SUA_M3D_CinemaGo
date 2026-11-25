@@ -1,7 +1,7 @@
 use axum::routing::{delete, get, post, put};
 use axum::Router;
 use utoipa::OpenApi;
-use utoipa_swagger_ui::SwaggerUi;
+use utoipa_swagger_ui::{Config, SwaggerUi};
 
 use crate::handlers::{auth_handlers, health, user_handlers};
 use crate::openapi::ApiDoc;
@@ -21,6 +21,12 @@ pub fn create_router(state: AppState) -> Router {
         )
         .route("/users/{id}/role", put(user_handlers::update_role))
         .route("/users/{id}/sessions", delete(auth_handlers::logout))
-        .merge(SwaggerUi::new("/docs").url("/openapi.json", ApiDoc::openapi()))
+        .route("/auth/verify", get(auth_handlers::verify))
+        // Relative spec url so Swagger also works behind Traefik on /api/users/docs/
+        .merge(
+            SwaggerUi::new("/docs")
+                .url("/openapi.json", ApiDoc::openapi())
+                .config(Config::new(["../openapi.json"])),
+        )
         .with_state(state)
 }

@@ -113,3 +113,33 @@ pub async fn logout(
     }
     Ok(StatusCode::NO_CONTENT)
 }
+
+#[utoipa::path(
+    get,
+    path = "/auth/verify",
+    tag = "auth",
+    security(("bearerAuth" = [])),
+    responses(
+        (
+            status = 200,
+            description = "Token is valid, used by Traefik ForwardAuth",
+            headers(
+                ("X-User-Id" = i32, description = "Id of the logged in user"),
+                ("X-User-Role" = String, description = "user or admin")
+            )
+        ),
+        (status = 401, description = "Missing or invalid token", body = ErrorResponse)
+    )
+)]
+pub async fn verify(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<(StatusCode, [(&'static str, String); 2]), ApiError> {
+    // Traefik calls this before every protected request and copies these headers to the target service
+    let logged_in_user = current_user::get_logged_in_user(&headers, &state).await?;
+    let user_headers = [
+        ("X-User-Id", logged_in_user.id.to_string()),
+        ("X-User-Role", logged_in_user.role.clone()),
+    ];
+    Ok((StatusCode::OK, user_headers))
+}

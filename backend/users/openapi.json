@@ -8,7 +8,60 @@
     },
     "version": "1.0.0"
   },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Direct to the users service"
+    },
+    {
+      "url": "/api",
+      "description": "Through the Traefik gateway"
+    }
+  ],
   "paths": {
+    "/auth/verify": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "verify",
+        "responses": {
+          "200": {
+            "description": "Token is valid, used by Traefik ForwardAuth",
+            "headers": {
+              "X-User-Id": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                },
+                "description": "Id of the logged in user"
+              },
+              "X-User-Role": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "user or admin"
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/health": {
       "get": {
         "tags": [
