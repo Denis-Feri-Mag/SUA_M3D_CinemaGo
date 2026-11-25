@@ -1,0 +1,42 @@
+mod auth;
+mod clients;
+mod config;
+mod db;
+mod errors;
+mod handlers;
+mod models;
+mod openapi;
+mod routes;
+mod state;
+
+use std::time::Duration;
+
+use config::Config;
+use state::AppState;
+
+#[tokio::main]
+async fn main() {
+    let config = Config::from_env();
+
+    let pool = db::connect(&config.database_url).await;
+    db::create_tables(&pool).await;
+
+    let http_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .expect("could not create http client");
+
+    let state = AppState {
+        pool,
+        jwt_secret: config.jwt_secret,
+        notifications_url: config.notifications_url,
+        http_client,
+    };
+
+    let app = routes::create_router(state);
+
+    let address = format!("0.0.0.0:{}", config.port);
+    let listener = tokio::net::TcpListener::bind(&address).await.unwrap();
+    println!("users service running on {address}");
+    axum::serve(listener, app).await.unwrap();
+}

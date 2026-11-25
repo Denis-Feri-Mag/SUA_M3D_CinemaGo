@@ -5,9 +5,10 @@ Users can browse movies, see screenings, book seats, pay (simulated) and leave r
 
 ## Run it
 
-1. Copy `.env.example` to `.env`
-2. Run `docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build`
-3. Open the frontend (port TBD)
+1. Run `.\dev.ps1` on Windows or `./dev.sh` on Mac/Linux. It copies `.env.example` to `.env` if needed and starts everything
+2. Open the gateway on http://localhost:8080 (frontend port TBD)
+
+Other commands: `down`, `logs [service]`, `reset` (also deletes the databases), `ps`. For example `.\dev.ps1 logs users`.
 
 ## Run one service locally
 

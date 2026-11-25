@@ -22,4 +22,15 @@
 #   extra_hosts:
 #     - "host.docker.internal:host-gateway"
 
-services: {}
+services:
+  # Traefik dashboard on http://localhost:8090
+  traefik:
+    ports:
+      - "8090:8080"
+
+  users:
+    ports:
+      - "8081:8080"
+  users-db:
+    ports:
+      - "5432:5432"
