@@ -21,13 +21,13 @@ On Linux, compose needs `extra_hosts: ["host.docker.internal:host-gateway"]` for
 
 | Service                | Folder                | Port | Owner    | Git user |
 |------------------------|-----------------------|------|----------|----------|
-| users                  | backend/users         | TBD  | Denis    | TBD      |
-| movies                 | backend/movies        | TBD  | Marija   | TBD      |
-| screenings             | backend/screenings    | TBD  | Matea    | TBD      |
-| reservations           | backend/reservations  | TBD  | Denis    | TBD      |
-| payments               | backend/payments      | TBD  | Matea    | TBD      |
-| reviews                | backend/reviews       | TBD  | Mila     | TBD      |
-| notifications          | backend/notifications | TBD  | Mila     | TBD      |
+| users                  | backend/users         | 8081 | Denis    | TBD      |
+| movies                 | backend/movies        | 8082 | Marija   | TBD      |
+| screenings             | backend/screenings    | 8083 | Matea    | TBD      |
+| reservations           | backend/reservations  | 8084 | Denis    | TBD      |
+| payments               | backend/payments      | 8085 | Matea    | TBD      |
+| reviews                | backend/reviews       | 8086 | Mila     | TBD      |
+| notifications          | backend/notifications | 8087 | Mila     | TBD      |
 | frontend               | frontend              | TBD  | Marija   | TBD      |
 | gateway, docs, compose |                       |      | everyone | everyone |
 
