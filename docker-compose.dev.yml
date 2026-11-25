@@ -1,19 +1,10 @@
-# Local dev overrides.
-# Run with:
-#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# Local dev overrides, published ports for testing.
+# Run with .\dev.ps1 or ./dev.sh (same as
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build)
 #
-# Volume mounts: add them on each service so code changes apply without a rebuild,
-# for example:
-#   movies:
-#     volumes:
-#       - ./backend/movies:/app
-#
-# Published DB ports: publish each database on localhost so you can connect
-# from a service running on the host, for example:
-#   movies-db:
-#     ports:
-#       - "5432:5432"
-# Every database needs a different host port (5432, 5433, ...).
+# Internal networks cannot publish ports, so in dev every service
+# and database also joins the normal "dev" network.
+# Uncomment your service and database below when you enable them in docker-compose.yml.
 #
 # Running one service locally:
 # Start the rest with compose, then point that service's env URLs at
@@ -31,6 +22,79 @@ services:
   users:
     ports:
       - "8081:8080"
+    networks:
+      - dev
   users-db:
     ports:
       - "5432:5432"
+    networks:
+      - dev
+
+  # movies:
+  #   ports:
+  #     - "8082:8080"
+  #   networks:
+  #     - dev
+  # movies-db:
+  #   ports:
+  #     - "5433:5432"
+  #   networks:
+  #     - dev
+
+  # screenings:
+  #   ports:
+  #     - "8083:8080"
+  #   networks:
+  #     - dev
+  # screenings-db:
+  #   ports:
+  #     - "5434:5432"
+  #   networks:
+  #     - dev
+
+  # reservations:
+  #   ports:
+  #     - "8084:8080"
+  #   networks:
+  #     - dev
+  # reservations-db:
+  #   ports:
+  #     - "5435:5432"
+  #   networks:
+  #     - dev
+
+  # payments:
+  #   ports:
+  #     - "8085:8080"
+  #   networks:
+  #     - dev
+  # payments-db:
+  #   ports:
+  #     - "5436:5432"
+  #   networks:
+  #     - dev
+
+  # reviews:
+  #   ports:
+  #     - "8086:8080"
+  #   networks:
+  #     - dev
+  # reviews-db:
+  #   ports:
+  #     - "5437:5432"
+  #   networks:
+  #     - dev
+
+  # notifications:
+  #   ports:
+  #     - "8087:8080"
+  #   networks:
+  #     - dev
+  # notifications-db:
+  #   ports:
+  #     - "5438:5432"
+  #   networks:
+  #     - dev
+
+networks:
+  dev:

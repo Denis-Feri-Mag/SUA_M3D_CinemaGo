@@ -1,21 +1,10 @@
 # Base compose file.
-# Every service and its own database go here, like users below.
 # Traefik is the gateway, all requests from the browser go through it on port 8080.
-#
-# To put your service behind Traefik, copy these labels (replace movies with your service).
-# Routes are protected by default, the auth middleware checks the token with the users service:
-#
-#   movies:
-#     build: ./backend/movies
-#     labels:
-#       - traefik.enable=true
-#       - traefik.http.routers.movies.rule=PathPrefix(`/api/movies`)
-#       - traefik.http.routers.movies.middlewares=auth,strip-api
-#       - traefik.http.services.movies.loadbalancer.server.port=8080
-#
-# For a public route (no token), add a second router with a longer rule and without auth:
-#       - traefik.http.routers.movies-public.rule=Method(`GET`) && PathPrefix(`/api/movies`)
-#       - traefik.http.routers.movies-public.middlewares=strip-api
+# Networks:
+#   public       Traefik only, the only network with a published port
+#   backend      Traefik and all services (internal, no internet)
+#   <name>-db-net one service and its database (internal)
+# To enable your service, uncomment its blocks here, in volumes, networks and in docker-compose.dev.yml.
 
 services:
   traefik:
@@ -23,6 +12,8 @@ services:
     command:
       - --providers.docker=true
       - --providers.docker.exposedByDefault=false
+      # Traefik talks to services over the backend network
+      - --providers.docker.network=m3d_backend
       - --entrypoints.web.address=:80
       - --api.dashboard=true
       - --api.insecure=true
@@ -30,6 +21,9 @@ services:
       - "8080:80"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - public
+      - backend
 
   users:
     build: ./backend/users
@@ -42,6 +36,9 @@ services:
     depends_on:
       users-db:
         condition: service_healthy
+    networks:
+      - backend
+      - users-db-net
     labels:
       - traefik.enable=true
       - traefik.http.services.users.loadbalancer.server.port=8080
@@ -78,6 +75,278 @@ services:
       test: ["CMD-SHELL", "pg_isready -U m3d_users -d m3d_users"]
       interval: 5s
       retries: 10
+    networks:
+      - users-db-net
+
+  # ---- movies (uncomment when the service exists) ----
+  # movies:
+  #   build: ./backend/movies
+  #   environment:
+  #     PORT: 8080
+  #     DB_URL: postgres://m3d_movies:${MOVIES_DB_PASSWORD}@movies-db:5432/m3d_movies
+  #     REVIEWS_URL: http://reviews:8080
+  #   depends_on:
+  #     movies-db:
+  #       condition: service_healthy
+  #   networks:
+  #     - backend
+  #     - movies-db-net
+  #   labels:
+  #     - traefik.enable=true
+  #     - traefik.http.services.movies.loadbalancer.server.port=8080
+  #     # Protected: everything under /api/movies
+  #     - traefik.http.routers.movies.rule=PathPrefix(`/api/movies`)
+  #     - traefik.http.routers.movies.middlewares=auth,strip-api
+  #     # Public: GET without a token
+  #     - traefik.http.routers.movies-public.rule=Method(`GET`) && PathPrefix(`/api/movies`)
+  #     - traefik.http.routers.movies-public.middlewares=strip-api
+  #     # Public: health and swagger, /api/movies/docs/ becomes /docs/
+  #     - traefik.http.routers.movies-docs.rule=Path(`/api/movies/health`) || PathPrefix(`/api/movies/docs`) || Path(`/api/movies/openapi.json`)
+  #     - traefik.http.routers.movies-docs.middlewares=movies-strip
+  #     - traefik.http.middlewares.movies-strip.stripprefix.prefixes=/api/movies
+
+  # movies-db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: m3d_movies
+  #     POSTGRES_USER: m3d_movies
+  #     POSTGRES_PASSWORD: ${MOVIES_DB_PASSWORD}
+  #   volumes:
+  #     - movies-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U m3d_movies -d m3d_movies"]
+  #     interval: 5s
+  #     retries: 10
+  #   networks:
+  #     - movies-db-net
+
+  # ---- screenings (uncomment when the service exists) ----
+  # screenings:
+  #   build: ./backend/screenings
+  #   environment:
+  #     PORT: 8080
+  #     DB_URL: postgres://m3d_screenings:${SCREENINGS_DB_PASSWORD}@screenings-db:5432/m3d_screenings
+  #     MOVIES_URL: http://movies:8080
+  #   depends_on:
+  #     screenings-db:
+  #       condition: service_healthy
+  #   networks:
+  #     - backend
+  #     - screenings-db-net
+  #   labels:
+  #     - traefik.enable=true
+  #     - traefik.http.services.screenings.loadbalancer.server.port=8080
+  #     # Protected: everything under /api/screenings
+  #     - traefik.http.routers.screenings.rule=PathPrefix(`/api/screenings`)
+  #     - traefik.http.routers.screenings.middlewares=auth,strip-api
+  #     # Public: GET without a token
+  #     - traefik.http.routers.screenings-public.rule=Method(`GET`) && PathPrefix(`/api/screenings`)
+  #     - traefik.http.routers.screenings-public.middlewares=strip-api
+  #     # Public: health and swagger, /api/screenings/docs/ becomes /docs/
+  #     - traefik.http.routers.screenings-docs.rule=Path(`/api/screenings/health`) || PathPrefix(`/api/screenings/docs`) || Path(`/api/screenings/openapi.json`)
+  #     - traefik.http.routers.screenings-docs.middlewares=screenings-strip
+  #     - traefik.http.middlewares.screenings-strip.stripprefix.prefixes=/api/screenings
+
+  # screenings-db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: m3d_screenings
+  #     POSTGRES_USER: m3d_screenings
+  #     POSTGRES_PASSWORD: ${SCREENINGS_DB_PASSWORD}
+  #   volumes:
+  #     - screenings-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U m3d_screenings -d m3d_screenings"]
+  #     interval: 5s
+  #     retries: 10
+  #   networks:
+  #     - screenings-db-net
+
+  # ---- reservations (uncomment when the service exists) ----
+  # reservations:
+  #   build: ./backend/reservations
+  #   environment:
+  #     PORT: 8080
+  #     DB_URL: postgres://m3d_reservations:${RESERVATIONS_DB_PASSWORD}@reservations-db:5432/m3d_reservations
+  #     SCREENINGS_URL: http://screenings:8080
+  #   depends_on:
+  #     reservations-db:
+  #       condition: service_healthy
+  #   networks:
+  #     - backend
+  #     - reservations-db-net
+  #   labels:
+  #     - traefik.enable=true
+  #     - traefik.http.services.reservations.loadbalancer.server.port=8080
+  #     # Protected: everything under /api/reservations
+  #     - traefik.http.routers.reservations.rule=PathPrefix(`/api/reservations`)
+  #     - traefik.http.routers.reservations.middlewares=auth,strip-api
+  #     # Public: health and swagger, /api/reservations/docs/ becomes /docs/
+  #     - traefik.http.routers.reservations-docs.rule=Path(`/api/reservations/health`) || PathPrefix(`/api/reservations/docs`) || Path(`/api/reservations/openapi.json`)
+  #     - traefik.http.routers.reservations-docs.middlewares=reservations-strip
+  #     - traefik.http.middlewares.reservations-strip.stripprefix.prefixes=/api/reservations
+
+  # reservations-db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: m3d_reservations
+  #     POSTGRES_USER: m3d_reservations
+  #     POSTGRES_PASSWORD: ${RESERVATIONS_DB_PASSWORD}
+  #   volumes:
+  #     - reservations-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U m3d_reservations -d m3d_reservations"]
+  #     interval: 5s
+  #     retries: 10
+  #   networks:
+  #     - reservations-db-net
+
+  # ---- payments (uncomment when the service exists) ----
+  # payments:
+  #   build: ./backend/payments
+  #   environment:
+  #     PORT: 8080
+  #     DB_URL: postgres://m3d_payments:${PAYMENTS_DB_PASSWORD}@payments-db:5432/m3d_payments
+  #     RESERVATIONS_URL: http://reservations:8080
+  #   depends_on:
+  #     payments-db:
+  #       condition: service_healthy
+  #   networks:
+  #     - backend
+  #     - payments-db-net
+  #   labels:
+  #     - traefik.enable=true
+  #     - traefik.http.services.payments.loadbalancer.server.port=8080
+  #     # Protected: everything under /api/payments
+  #     - traefik.http.routers.payments.rule=PathPrefix(`/api/payments`)
+  #     - traefik.http.routers.payments.middlewares=auth,strip-api
+  #     # Public: health and swagger, /api/payments/docs/ becomes /docs/
+  #     - traefik.http.routers.payments-docs.rule=Path(`/api/payments/health`) || PathPrefix(`/api/payments/docs`) || Path(`/api/payments/openapi.json`)
+  #     - traefik.http.routers.payments-docs.middlewares=payments-strip
+  #     - traefik.http.middlewares.payments-strip.stripprefix.prefixes=/api/payments
+
+  # payments-db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: m3d_payments
+  #     POSTGRES_USER: m3d_payments
+  #     POSTGRES_PASSWORD: ${PAYMENTS_DB_PASSWORD}
+  #   volumes:
+  #     - payments-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U m3d_payments -d m3d_payments"]
+  #     interval: 5s
+  #     retries: 10
+  #   networks:
+  #     - payments-db-net
+
+  # ---- reviews (uncomment when the service exists) ----
+  # reviews:
+  #   build: ./backend/reviews
+  #   environment:
+  #     PORT: 8080
+  #     DB_URL: postgres://m3d_reviews:${REVIEWS_DB_PASSWORD}@reviews-db:5432/m3d_reviews
+  #     MOVIES_URL: http://movies:8080
+  #   depends_on:
+  #     reviews-db:
+  #       condition: service_healthy
+  #   networks:
+  #     - backend
+  #     - reviews-db-net
+  #   labels:
+  #     - traefik.enable=true
+  #     - traefik.http.services.reviews.loadbalancer.server.port=8080
+  #     # Protected: everything under /api/reviews
+  #     - traefik.http.routers.reviews.rule=PathPrefix(`/api/reviews`)
+  #     - traefik.http.routers.reviews.middlewares=auth,strip-api
+  #     # Public: GET without a token
+  #     - traefik.http.routers.reviews-public.rule=Method(`GET`) && PathPrefix(`/api/reviews`)
+  #     - traefik.http.routers.reviews-public.middlewares=strip-api
+  #     # Public: health and swagger, /api/reviews/docs/ becomes /docs/
+  #     - traefik.http.routers.reviews-docs.rule=Path(`/api/reviews/health`) || PathPrefix(`/api/reviews/docs`) || Path(`/api/reviews/openapi.json`)
+  #     - traefik.http.routers.reviews-docs.middlewares=reviews-strip
+  #     - traefik.http.middlewares.reviews-strip.stripprefix.prefixes=/api/reviews
+
+  # reviews-db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: m3d_reviews
+  #     POSTGRES_USER: m3d_reviews
+  #     POSTGRES_PASSWORD: ${REVIEWS_DB_PASSWORD}
+  #   volumes:
+  #     - reviews-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U m3d_reviews -d m3d_reviews"]
+  #     interval: 5s
+  #     retries: 10
+  #   networks:
+  #     - reviews-db-net
+
+  # ---- notifications (uncomment when the service exists) ----
+  # notifications:
+  #   build: ./backend/notifications
+  #   environment:
+  #     PORT: 8080
+  #     DB_URL: postgres://m3d_notifications:${NOTIFICATIONS_DB_PASSWORD}@notifications-db:5432/m3d_notifications
+  #     USERS_URL: http://users:8080
+  #   depends_on:
+  #     notifications-db:
+  #       condition: service_healthy
+  #   networks:
+  #     - backend
+  #     - notifications-db-net
+  #   labels:
+  #     - traefik.enable=true
+  #     - traefik.http.services.notifications.loadbalancer.server.port=8080
+  #     # Protected: everything under /api/notifications
+  #     - traefik.http.routers.notifications.rule=PathPrefix(`/api/notifications`)
+  #     - traefik.http.routers.notifications.middlewares=auth,strip-api
+  #     # Public: health and swagger, /api/notifications/docs/ becomes /docs/
+  #     - traefik.http.routers.notifications-docs.rule=Path(`/api/notifications/health`) || PathPrefix(`/api/notifications/docs`) || Path(`/api/notifications/openapi.json`)
+  #     - traefik.http.routers.notifications-docs.middlewares=notifications-strip
+  #     - traefik.http.middlewares.notifications-strip.stripprefix.prefixes=/api/notifications
+
+  # notifications-db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: m3d_notifications
+  #     POSTGRES_USER: m3d_notifications
+  #     POSTGRES_PASSWORD: ${NOTIFICATIONS_DB_PASSWORD}
+  #   volumes:
+  #     - notifications-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U m3d_notifications -d m3d_notifications"]
+  #     interval: 5s
+  #     retries: 10
+  #   networks:
+  #     - notifications-db-net
+
+networks:
+  public:
+  backend:
+    # Fixed name so the Traefik setting above always matches
+    name: m3d_backend
+    internal: true
+  users-db-net:
+    internal: true
+  # movies-db-net:
+  #   internal: true
+  # screenings-db-net:
+  #   internal: true
+  # reservations-db-net:
+  #   internal: true
+  # payments-db-net:
+  #   internal: true
+  # reviews-db-net:
+  #   internal: true
+  # notifications-db-net:
+  #   internal: true
 
 volumes:
   users-data:
+  # movies-data:
+  # screenings-data:
+  # reservations-data:
+  # payments-data:
+  # reviews-data:
+  # notifications-data:
