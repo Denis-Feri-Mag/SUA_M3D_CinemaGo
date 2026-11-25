@@ -109,6 +109,7 @@ start_with_local_services() {
   done
 }
 
+# Runs one option and exits, only invalid input shows the menu again
 show_menu() {
   while true; do
     echo
@@ -128,7 +129,7 @@ show_menu() {
       3) rm -f "$local_routes_file"; $compose down ;;
       4)
         read -r -p "Service (empty = all): " service_name
-        $compose logs --tail 100 $service_name
+        $compose logs -f $service_name
         ;;
       5) $compose ps ;;
       6)
@@ -140,9 +141,10 @@ show_menu() {
           echo "Cancelled"
         fi
         ;;
-      0) exit 0 ;;
-      *) echo "Invalid choice: $choice" ;;
+      0) ;;
+      *) echo "Invalid choice: $choice"; continue ;;
     esac
+    return
   done
 }
 

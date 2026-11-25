@@ -121,8 +121,9 @@ function Start-WithLocalServices {
     }
 }
 
+# Runs one option and exits, only invalid input shows the menu again
 function Show-Menu {
-    while ($true) {
+    :menuLoop while ($true) {
         Write-Host ""
         Write-Host "CinemaGo dev menu"
         Write-Host "  1) Start all in Docker"
@@ -145,7 +146,7 @@ function Show-Menu {
             }
             "4" {
                 $serviceName = Read-Host "Service (empty = all)"
-                if ($serviceName) { docker @compose logs --tail 100 $serviceName } else { docker @compose logs --tail 100 }
+                if ($serviceName) { docker @compose logs -f $serviceName } else { docker @compose logs -f }
             }
             "5" { docker @compose ps }
             "6" {
@@ -156,9 +157,13 @@ function Show-Menu {
                 }
                 else { Write-Host "Cancelled" }
             }
-            "0" { return }
-            default { Write-Host "Invalid choice: $choice" }
+            "0" { }
+            default {
+                Write-Host "Invalid choice: $choice"
+                continue menuLoop
+            }
         }
+        return
     }
 }
 

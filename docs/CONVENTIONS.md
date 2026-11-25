@@ -32,7 +32,7 @@ Tickets and PRs use the same plain style:
 
 ## Running
 
-- Run `.\dev.ps1` (Windows) or `./dev.sh` (Mac/Linux) from the repo root for the menu: start all, start with some services local, stop, logs, status, reset
+- Run `.\dev.ps1` (Windows) or `./dev.sh` (Mac/Linux) from the repo root for the menu: start all, start with some services local, stop, logs (Ctrl+C to quit), status, reset. It runs one option and exits
 - Quick commands without the menu: `up`, `down`, `logs [service]`, `reset`, `ps`
 
 ## Running locally (dev only)

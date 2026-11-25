@@ -5,7 +5,7 @@ Users can browse movies, see screenings, book seats, pay (simulated) and leave r
 
 ## Run it
 
-1. Run `.\dev.ps1` on Windows or `./dev.sh` on Mac/Linux. It opens a menu and copies `.env.example` to `.env` if needed
+1. Run `.\dev.ps1` on Windows or `./dev.sh` on Mac/Linux. It opens a menu, runs the option you pick and exits. It copies `.env.example` to `.env` if needed
 2. Choose `1` to start everything in Docker, or `2` to run some services locally (see below)
 3. Open the gateway on http://localhost:8080 (frontend port TBD)
 
