@@ -4,6 +4,7 @@ mod clients;
 mod config;
 mod db;
 mod errors;
+mod extractors;
 mod handlers;
 mod models;
 mod openapi;

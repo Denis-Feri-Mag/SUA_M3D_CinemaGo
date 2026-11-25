@@ -71,6 +71,7 @@ Logout and deleting a user also remove the user's refresh tokens.
 `/auth/verify` returns 200 with `X-User-Id` and `X-User-Role` headers, or 401.
 The first registered user becomes admin.
 Passwords are hashed with argon2 and are never returned.
+All errors are JSON like `{ "error": "user not found" }`, also for bad JSON bodies (400, 415, 422), bad path values (400) and unknown paths (404).
 
 ## Cache
 
