@@ -44,6 +44,16 @@ services:
       ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-15}
       CACHE_URL: redis://users-cache:6379
       CACHE_TTL_SECONDS: 300
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    # Traefik only sends requests to users when this passes
+    # wget is part of alpine, 127.0.0.1 because localhost can be IPv6
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     depends_on:
       users-db:
         condition: service_healthy

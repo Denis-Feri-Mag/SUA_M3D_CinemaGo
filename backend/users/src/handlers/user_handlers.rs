@@ -132,7 +132,8 @@ pub async fn update_user(
         (status = 400, description = "Role must be user or admin", body = ErrorResponse),
         (status = 401, description = "Missing or invalid token", body = ErrorResponse),
         (status = 403, description = "Not an admin", body = ErrorResponse),
-        (status = 404, description = "User not found", body = ErrorResponse)
+        (status = 404, description = "User not found", body = ErrorResponse),
+        (status = 409, description = "Cannot remove the last admin", body = ErrorResponse)
     )
 )]
 pub async fn update_role(
@@ -153,6 +154,10 @@ pub async fn update_role(
         ));
     }
 
+    if request.role == "user" {
+        check_not_last_admin(&state, user_id).await?;
+    }
+
     let user = user_queries::update_role(&state.pool, user_id, &request.role)
         .await?
         .ok_or(ApiError::not_found())?;
@@ -170,7 +175,8 @@ pub async fn update_role(
         (status = 204, description = "User deleted"),
         (status = 401, description = "Missing or invalid token", body = ErrorResponse),
         (status = 403, description = "Not your account", body = ErrorResponse),
-        (status = 404, description = "User not found", body = ErrorResponse)
+        (status = 404, description = "User not found", body = ErrorResponse),
+        (status = 409, description = "Cannot delete the last admin", body = ErrorResponse)
     )
 )]
 pub async fn delete_user(
@@ -181,10 +187,27 @@ pub async fn delete_user(
     let logged_in_user = current_user::get_logged_in_user(&headers, &state).await?;
     current_user::check_self_or_admin(&logged_in_user, user_id)?;
 
+    check_not_last_admin(&state, user_id).await?;
+
     let was_deleted = user_queries::delete_user(&state.pool, user_id).await?;
     user_cache::remove_user(&state, user_id).await;
     if !was_deleted {
         return Err(ApiError::not_found());
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+// The app always needs one admin, so the last one cannot be deleted or made a normal user
+async fn check_not_last_admin(state: &AppState, user_id: i32) -> Result<(), ApiError> {
+    let user = match user_queries::get_user_by_id(&state.pool, user_id).await? {
+        Some(user) => user,
+        None => return Ok(()),
+    };
+    if user.role == "admin" && user_queries::count_admins(&state.pool).await? <= 1 {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "cannot remove the last admin",
+        ));
+    }
+    Ok(())
 }

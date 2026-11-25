@@ -9,6 +9,8 @@ pub struct Config {
     pub access_token_minutes: i64,
     pub cache_url: String,
     pub cache_ttl_seconds: u64,
+    pub admin_email: Option<String>,
+    pub admin_password: Option<String>,
 }
 
 impl Config {
@@ -30,6 +32,16 @@ impl Config {
                 .unwrap_or("300".to_string())
                 .parse()
                 .expect("CACHE_TTL_SECONDS must be a number"),
+            admin_email: optional_env("ADMIN_EMAIL"),
+            admin_password: optional_env("ADMIN_PASSWORD"),
         }
+    }
+}
+
+// None when the variable is missing or empty
+fn optional_env(name: &str) -> Option<String> {
+    match env::var(name) {
+        Ok(value) if !value.trim().is_empty() => Some(value),
+        _ => None,
     }
 }

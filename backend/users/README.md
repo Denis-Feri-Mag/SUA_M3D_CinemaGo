@@ -47,6 +47,9 @@ The table is created on startup.
 | ACCESS_TOKEN_MINUTES | How long an access token lasts (default 15)      |
 | CACHE_URL            | Valkey address, like `redis://localhost:6379`    |
 | CACHE_TTL_SECONDS    | How long a user stays in the cache (default 300) |
+| ADMIN_EMAIL          | Admin created on start if it does not exist      |
+| ADMIN_PASSWORD       | Password for that admin (empty = no admin)       |
+| RUST_LOG             | Log level (default `info,sqlx=warn`)             |
 
 ## Endpoints
 
@@ -70,7 +73,10 @@ The access token lasts 15 minutes. When it expires, send `{ refreshToken }` to `
 Each refresh token works once and lasts 7 days. Only its sha256 hash is saved in the `refresh_tokens` table.
 Logout and deleting a user also remove the user's refresh tokens.
 `/auth/verify` returns 200 with `X-User-Id` and `X-User-Role` headers, or 401.
-The first registered user becomes admin.
+On start the service creates an admin from `ADMIN_EMAIL` and `ADMIN_PASSWORD` if that email does not exist yet.
+Without them, the first registered user becomes admin.
+The last admin cannot be deleted or made a normal user (409).
+Every request is logged with method, path, status and time.
 Passwords are hashed with argon2 and are never returned.
 All errors are JSON like `{ "error": "user not found" }`, also for bad JSON bodies (400, 415, 422), bad path values (400) and unknown paths (404).
 

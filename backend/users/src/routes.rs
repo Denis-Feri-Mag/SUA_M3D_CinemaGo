@@ -1,6 +1,8 @@
 use axum::http::StatusCode;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
+use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
+use tracing::Level;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::{Config, SwaggerUi};
 
@@ -34,6 +36,12 @@ pub fn create_router(state: AppState) -> Router {
         )
         // Unknown paths also get a JSON error
         .fallback(not_found)
+        // One log line per request with method, path, status and time
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                .on_response(DefaultOnResponse::new().level(Level::INFO)),
+        )
         .with_state(state)
 }
 

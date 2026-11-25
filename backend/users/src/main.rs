@@ -18,13 +18,25 @@ use std::time::Duration;
 
 use config::Config;
 use state::AppState;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() {
+    // Logs go to stdout, change the level with RUST_LOG (default info)
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,sqlx=warn")),
+        )
+        .init();
+
     let config = Config::from_env();
 
     let pool = db::connect(&config.database_url).await;
     db::create_tables(&pool).await;
+    if let (Some(admin_email), Some(admin_password)) = (&config.admin_email, &config.admin_password)
+    {
+        db::seed::seed_admin(&pool, admin_email, admin_password).await;
+    }
 
     let http_client = reqwest::Client::builder()
         .timeout(Duration::from_secs(2))

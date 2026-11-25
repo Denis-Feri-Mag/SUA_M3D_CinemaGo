@@ -34,6 +34,12 @@ pub async fn count_users(pool: &PgPool) -> Result<i64, sqlx::Error> {
         .await
 }
 
+pub async fn count_admins(pool: &PgPool) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users WHERE role = 'admin'")
+        .fetch_one(pool)
+        .await
+}
+
 pub async fn insert_user(
     pool: &PgPool,
     name: &str,
