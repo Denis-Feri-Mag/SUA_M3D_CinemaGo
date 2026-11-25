@@ -1,13 +1,15 @@
-use axum::extract::State;
+use axum::extract::rejection::QueryRejection;
+use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
+use validator::Validate;
 
 use crate::auth::current_user;
 use crate::cache::user_cache;
 use crate::db::user_queries;
 use crate::errors::ApiError;
 use crate::extractors::{Json, Path};
-use crate::models::requests::{UpdateRoleRequest, UpdateUserRequest};
-use crate::models::responses::{ErrorResponse, UserResponse};
+use crate::models::requests::{PageQuery, UpdateRoleRequest, UpdateUserRequest};
+use crate::models::responses::{ErrorResponse, UserPage, UserResponse};
 use crate::state::AppState;
 
 #[utoipa::path(
@@ -15,8 +17,10 @@ use crate::state::AppState;
     path = "/users",
     tag = "users",
     security(("bearerAuth" = [])),
+    params(PageQuery),
     responses(
-        (status = 200, description = "All users (admin only)", body = Vec<UserResponse>),
+        (status = 200, description = "One page of users (admin only)", body = UserPage),
+        (status = 400, description = "Bad page or pageSize", body = ErrorResponse),
         (status = 401, description = "Missing or invalid token", body = ErrorResponse),
         (status = 403, description = "Not an admin", body = ErrorResponse)
     )
@@ -24,18 +28,36 @@ use crate::state::AppState;
 pub async fn get_users(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<Vec<UserResponse>>, ApiError> {
+    query: Result<Query<PageQuery>, QueryRejection>,
+) -> Result<Json<UserPage>, ApiError> {
     let logged_in_user = current_user::get_logged_in_user(&headers, &state).await?;
     if logged_in_user.role != "admin" {
         return Err(ApiError::forbidden());
     }
 
-    let users = user_queries::get_all_users(&state.pool).await?;
+    let Query(page_query) = query?;
+    let page = page_query.page.unwrap_or(1);
+    let page_size = page_query.page_size.unwrap_or(20);
+    if page < 1 || !(1..=100).contains(&page_size) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "page must be at least 1 and pageSize 1 to 100",
+        ));
+    }
+
+    let offset = (page - 1) * page_size;
+    let users = user_queries::get_users_page(&state.pool, page_size, offset).await?;
+    let total = user_queries::count_users(&state.pool).await?;
     let mut user_list = Vec::new();
     for user in users {
         user_list.push(user.to_response());
     }
-    Ok(Json(user_list))
+    Ok(Json(UserPage {
+        items: user_list,
+        page,
+        page_size,
+        total,
+    }))
 }
 
 #[utoipa::path(
@@ -68,7 +90,7 @@ pub async fn get_user(
     request_body = UpdateUserRequest,
     responses(
         (status = 200, description = "User updated", body = UserResponse),
-        (status = 400, description = "Missing fields", body = ErrorResponse),
+        (status = 400, description = "Invalid name or email", body = ErrorResponse),
         (status = 401, description = "Missing or invalid token", body = ErrorResponse),
         (status = 403, description = "Not your account", body = ErrorResponse),
         (status = 404, description = "User not found", body = ErrorResponse),
@@ -84,13 +106,11 @@ pub async fn update_user(
     let logged_in_user = current_user::get_logged_in_user(&headers, &state).await?;
     current_user::check_self_or_admin(&logged_in_user, user_id)?;
 
+    request.validate()?;
     let name = request.name.trim();
     let email = request.email.trim().to_lowercase();
-    if name.is_empty() || email.is_empty() {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "name and email are required",
-        ));
+    if name.is_empty() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "name: is required"));
     }
 
     let user = user_queries::update_user(&state.pool, user_id, name, &email)

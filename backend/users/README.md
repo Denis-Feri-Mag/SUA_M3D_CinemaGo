@@ -53,7 +53,7 @@ The table is created on startup.
 | Method | Path                  | Token         | What it does                          |
 |--------|-----------------------|---------------|---------------------------------------|
 | GET    | /health               | no            | Health check                          |
-| GET    | /users                | admin         | List all users                        |
+| GET    | /users                | admin         | List users, `?page=1&pageSize=20`     |
 | GET    | /users/{id}           | no            | Get one user                          |
 | POST   | /users/register       | no            | Create a user (201)                   |
 | POST   | /users/login          | no            | Returns access and refresh token      |
@@ -73,6 +73,18 @@ Logout and deleting a user also remove the user's refresh tokens.
 The first registered user becomes admin.
 Passwords are hashed with argon2 and are never returned.
 All errors are JSON like `{ "error": "user not found" }`, also for bad JSON bodies (400, 415, 422), bad path values (400) and unknown paths (404).
+
+`GET /users` returns `{ items, page, pageSize, total }`, pageSize is 1 to 100.
+
+## Validation
+
+Request bodies are checked with the `validator` crate (rules are on the structs in `src/models/requests.rs`):
+
+- name: 1 to 100 characters
+- email: a valid email, saved in lowercase
+- password: 6 to 128 characters
+
+A bad value returns 400, for example `{ "error": "email: must be a valid email" }`.
 
 ## Cache
 

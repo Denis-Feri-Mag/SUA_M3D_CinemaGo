@@ -2,8 +2,14 @@ use sqlx::PgPool;
 
 use crate::models::user::UserRow;
 
-pub async fn get_all_users(pool: &PgPool) -> Result<Vec<UserRow>, sqlx::Error> {
-    sqlx::query_as::<_, UserRow>("SELECT * FROM users ORDER BY id")
+pub async fn get_users_page(
+    pool: &PgPool,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<UserRow>, sqlx::Error> {
+    sqlx::query_as::<_, UserRow>("SELECT * FROM users ORDER BY id LIMIT $1 OFFSET $2")
+        .bind(limit)
+        .bind(offset)
         .fetch_all(pool)
         .await
 }

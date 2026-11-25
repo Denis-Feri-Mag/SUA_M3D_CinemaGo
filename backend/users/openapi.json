@@ -88,16 +88,48 @@
           "users"
         ],
         "operationId": "get_users",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number, starts at 1 (default 1)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Users per page, 1 to 100 (default 20)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "All users (admin only)",
+            "description": "One page of users (admin only)",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/UserResponse"
-                  }
+                  "$ref": "#/components/schemas/UserPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad page or pageSize",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -286,7 +318,7 @@
             }
           },
           "400": {
-            "description": "Missing fields or short password",
+            "description": "Invalid name, email or password",
             "content": {
               "application/json": {
                 "schema": {
@@ -388,7 +420,7 @@
             }
           },
           "400": {
-            "description": "Missing fields",
+            "description": "Invalid name or email",
             "content": {
               "application/json": {
                 "schema": {
@@ -698,10 +730,12 @@
         ],
         "properties": {
           "email": {
-            "type": "string"
+            "type": "string",
+            "example": "ana@example.com"
           },
           "password": {
-            "type": "string"
+            "type": "string",
+            "example": "secret123"
           }
         }
       },
@@ -759,13 +793,21 @@
         ],
         "properties": {
           "email": {
-            "type": "string"
+            "type": "string",
+            "format": "email",
+            "example": "ana@example.com"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "example": "Ana Novak",
+            "maxLength": 100,
+            "minLength": 1
           },
           "password": {
-            "type": "string"
+            "type": "string",
+            "example": "secret123",
+            "maxLength": 128,
+            "minLength": 6
           }
         }
       },
@@ -777,7 +819,8 @@
         "properties": {
           "role": {
             "type": "string",
-            "description": "\"user\" or \"admin\""
+            "description": "\"user\" or \"admin\"",
+            "example": "admin"
           }
         }
       },
@@ -789,10 +832,45 @@
         ],
         "properties": {
           "email": {
-            "type": "string"
+            "type": "string",
+            "format": "email",
+            "example": "ana@example.com"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "example": "Ana Novak",
+            "maxLength": 100,
+            "minLength": 1
+          }
+        }
+      },
+      "UserPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserResponse"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of all users"
           }
         }
       },

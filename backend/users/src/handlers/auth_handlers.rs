@@ -1,5 +1,6 @@
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
+use validator::Validate;
 
 use crate::auth::{current_user, jwt, password, refresh_token};
 use crate::cache::user_cache;
@@ -20,7 +21,7 @@ use crate::state::AppState;
     request_body = RegisterRequest,
     responses(
         (status = 201, description = "User created", body = UserResponse),
-        (status = 400, description = "Missing fields or short password", body = ErrorResponse),
+        (status = 400, description = "Invalid name, email or password", body = ErrorResponse),
         (status = 409, description = "Email already exists", body = ErrorResponse)
     )
 )]
@@ -28,20 +29,13 @@ pub async fn register(
     State(state): State<AppState>,
     Json(request): Json<RegisterRequest>,
 ) -> Result<(StatusCode, Json<UserResponse>), ApiError> {
+    request.validate()?;
     let name = request.name.trim();
     let email = request.email.trim().to_lowercase();
 
-    if name.is_empty() || email.is_empty() {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "name and email are required",
-        ));
-    }
-    if request.password.len() < 6 {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "password must have at least 6 characters",
-        ));
+    // Only spaces passes the length check, so check the trimmed name too
+    if name.is_empty() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "name: is required"));
     }
 
     // The first user becomes admin, everyone else is a normal user
@@ -211,7 +205,7 @@ pub async fn verify(
     request_body = ChangePasswordRequest,
     responses(
         (status = 204, description = "Password changed, log in again because old tokens stop working"),
-        (status = 400, description = "New password too short", body = ErrorResponse),
+        (status = 400, description = "New password must have 6 to 128 characters", body = ErrorResponse),
         (status = 401, description = "Missing or invalid token, or wrong old password", body = ErrorResponse)
     )
 )]
@@ -232,12 +226,7 @@ pub async fn change_password(
             "old password is wrong",
         ));
     }
-    if request.new_password.len() < 6 {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "password must have at least 6 characters",
-        ));
-    }
+    request.validate()?;
 
     let password_hash = password::hash_password(&request.new_password);
     user_queries::update_password(&state.pool, user.id, &password_hash).await?;
