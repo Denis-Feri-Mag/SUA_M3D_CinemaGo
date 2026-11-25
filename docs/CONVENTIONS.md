@@ -30,6 +30,17 @@ Tickets and PRs use the same plain style:
 - Times in ISO 8601 UTC, like `2026-11-20T18:30:00Z`
 - Errors look like `{ "error": "movie not found" }` with the right status code
 
+## Gateway (Traefik)
+
+- The browser only talks to Traefik on http://localhost:8080, every service is under `/api/<service>`
+- Traefik removes `/api`, so `/api/movies/1` reaches your service as `/movies/1`
+- To add your service, copy the label example at the top of `docker-compose.yml`
+- Routes use the `auth` middleware by default. It asks the users service if the token is valid
+- After that your service gets `X-User-Id` and `X-User-Role` headers, read them instead of checking the JWT yourself
+- Only trust these headers on routes with `auth`. Public routes need their own router without `auth`
+- Calls between services go directly (like `http://users:8080`), not through Traefik
+- Dashboard (dev only): http://localhost:8090
+
 ## Ports
 
 Ports and owners are in the services table in the [README](../README.md#services). Pick a free port there before you start.

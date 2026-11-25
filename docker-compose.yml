@@ -1,8 +1,36 @@
 # Base compose file.
-# Add each service and its own database here, like the users example below.
-# Traefik (the gateway) comes in a later PR. Do not add it here yet.
+# Every service and its own database go here, like users below.
+# Traefik is the gateway, all requests from the browser go through it on port 8080.
+#
+# To put your service behind Traefik, copy these labels (replace movies with your service).
+# Routes are protected by default, the auth middleware checks the token with the users service:
+#
+#   movies:
+#     build: ./backend/movies
+#     labels:
+#       - traefik.enable=true
+#       - traefik.http.routers.movies.rule=PathPrefix(`/api/movies`)
+#       - traefik.http.routers.movies.middlewares=auth,strip-api
+#       - traefik.http.services.movies.loadbalancer.server.port=8080
+#
+# For a public route (no token), add a second router with a longer rule and without auth:
+#       - traefik.http.routers.movies-public.rule=Method(`GET`) && PathPrefix(`/api/movies`)
+#       - traefik.http.routers.movies-public.middlewares=strip-api
 
 services:
+  traefik:
+    image: traefik:v3
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedByDefault=false
+      - --entrypoints.web.address=:80
+      - --api.dashboard=true
+      - --api.insecure=true
+    ports:
+      - "8080:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
   users:
     build: ./backend/users
     environment:
@@ -13,6 +41,29 @@ services:
     depends_on:
       users-db:
         condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.http.services.users.loadbalancer.server.port=8080
+
+      # Shared middlewares, every service can use them
+      # auth: asks users if the token is valid and passes X-User-Id and X-User-Role on
+      - traefik.http.middlewares.auth.forwardauth.address=http://users:8080/auth/verify
+      - traefik.http.middlewares.auth.forwardauth.authResponseHeaders=X-User-Id,X-User-Role
+      # strip-api: /api/movies/1 becomes /movies/1
+      - traefik.http.middlewares.strip-api.stripprefix.prefixes=/api
+
+      # Protected: everything else under /api/users
+      - traefik.http.routers.users.rule=PathPrefix(`/api/users`)
+      - traefik.http.routers.users.middlewares=auth,strip-api
+
+      # Public: register and login
+      - traefik.http.routers.users-public.rule=Path(`/api/users/register`) || Path(`/api/users/login`)
+      - traefik.http.routers.users-public.middlewares=strip-api
+
+      # Public: health and swagger, /api/users/docs/ becomes /docs/
+      - traefik.http.routers.users-docs.rule=Path(`/api/users/health`) || PathPrefix(`/api/users/docs`) || Path(`/api/users/openapi.json`)
+      - traefik.http.routers.users-docs.middlewares=users-strip
+      - traefik.http.middlewares.users-strip.stripprefix.prefixes=/api/users
 
   users-db:
     image: postgres:16-alpine
