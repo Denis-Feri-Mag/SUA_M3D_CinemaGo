@@ -5,6 +5,8 @@
 #   backend      Traefik and all services (internal, no internet)
 #   <name>-db-net one service and its database (internal)
 # To enable your service, uncomment its blocks here, in volumes, networks and in docker-compose.dev.yml.
+# Service URLs like ${MOVIES_URL:-http://movies:8080} use the container by default,
+# the dev menu sets them to host.docker.internal when that service runs locally.
 
 services:
   traefik:
@@ -14,13 +16,20 @@ services:
       - --providers.docker.exposedByDefault=false
       # Traefik talks to services over the backend network
       - --providers.docker.network=m3d_backend
+      # Shared middlewares are in traefik/dynamic.yml
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
       - --entrypoints.web.address=:80
       - --api.dashboard=true
       - --api.insecure=true
     ports:
       - "8080:80"
+    environment:
+      # USERS_URL is only set by the dev menu when users runs locally
+      AUTH_URL: ${USERS_URL:-http://users:8080}/auth/verify
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik:/etc/traefik/dynamic:ro
     networks:
       - public
       - backend
@@ -31,7 +40,7 @@ services:
       PORT: 8080
       DB_URL: postgres://m3d_users:${USERS_DB_PASSWORD}@users-db:5432/m3d_users
       JWT_SECRET: ${JWT_SECRET}
-      NOTIFICATIONS_URL: ${NOTIFICATIONS_URL}
+      NOTIFICATIONS_URL: ${NOTIFICATIONS_URL:-http://notifications:8080}
       ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-15}
     depends_on:
       users-db:
@@ -43,20 +52,13 @@ services:
       - traefik.enable=true
       - traefik.http.services.users.loadbalancer.server.port=8080
 
-      # Shared middlewares, every service can use them
-      # auth: asks users if the token is valid and passes X-User-Id and X-User-Role on
-      - traefik.http.middlewares.auth.forwardauth.address=http://users:8080/auth/verify
-      - traefik.http.middlewares.auth.forwardauth.authResponseHeaders=X-User-Id,X-User-Role
-      # strip-api: /api/movies/1 becomes /movies/1
-      - traefik.http.middlewares.strip-api.stripprefix.prefixes=/api
-
       # Protected: everything else under /api/users
       - traefik.http.routers.users.rule=PathPrefix(`/api/users`)
-      - traefik.http.routers.users.middlewares=auth,strip-api
+      - traefik.http.routers.users.middlewares=auth@file,strip-api@file
 
       # Public: register, login and refresh
       - traefik.http.routers.users-public.rule=Path(`/api/users/register`) || Path(`/api/users/login`) || Path(`/api/users/refresh`)
-      - traefik.http.routers.users-public.middlewares=strip-api
+      - traefik.http.routers.users-public.middlewares=strip-api@file
 
       # Public: health and swagger, /api/users/docs/ becomes /docs/
       - traefik.http.routers.users-docs.rule=Path(`/api/users/health`) || PathPrefix(`/api/users/docs`) || Path(`/api/users/openapi.json`)
@@ -84,7 +86,7 @@ services:
   #   environment:
   #     PORT: 8080
   #     DB_URL: postgres://m3d_movies:${MOVIES_DB_PASSWORD}@movies-db:5432/m3d_movies
-  #     REVIEWS_URL: http://reviews:8080
+  #     REVIEWS_URL: ${REVIEWS_URL:-http://reviews:8080}
   #   depends_on:
   #     movies-db:
   #       condition: service_healthy
@@ -96,10 +98,10 @@ services:
   #     - traefik.http.services.movies.loadbalancer.server.port=8080
   #     # Protected: everything under /api/movies
   #     - traefik.http.routers.movies.rule=PathPrefix(`/api/movies`)
-  #     - traefik.http.routers.movies.middlewares=auth,strip-api
+  #     - traefik.http.routers.movies.middlewares=auth@file,strip-api@file
   #     # Public: GET without a token
   #     - traefik.http.routers.movies-public.rule=Method(`GET`) && PathPrefix(`/api/movies`)
-  #     - traefik.http.routers.movies-public.middlewares=strip-api
+  #     - traefik.http.routers.movies-public.middlewares=strip-api@file
   #     # Public: health and swagger, /api/movies/docs/ becomes /docs/
   #     - traefik.http.routers.movies-docs.rule=Path(`/api/movies/health`) || PathPrefix(`/api/movies/docs`) || Path(`/api/movies/openapi.json`)
   #     - traefik.http.routers.movies-docs.middlewares=movies-strip
@@ -126,7 +128,7 @@ services:
   #   environment:
   #     PORT: 8080
   #     DB_URL: postgres://m3d_screenings:${SCREENINGS_DB_PASSWORD}@screenings-db:5432/m3d_screenings
-  #     MOVIES_URL: http://movies:8080
+  #     MOVIES_URL: ${MOVIES_URL:-http://movies:8080}
   #   depends_on:
   #     screenings-db:
   #       condition: service_healthy
@@ -138,10 +140,10 @@ services:
   #     - traefik.http.services.screenings.loadbalancer.server.port=8080
   #     # Protected: everything under /api/screenings
   #     - traefik.http.routers.screenings.rule=PathPrefix(`/api/screenings`)
-  #     - traefik.http.routers.screenings.middlewares=auth,strip-api
+  #     - traefik.http.routers.screenings.middlewares=auth@file,strip-api@file
   #     # Public: GET without a token
   #     - traefik.http.routers.screenings-public.rule=Method(`GET`) && PathPrefix(`/api/screenings`)
-  #     - traefik.http.routers.screenings-public.middlewares=strip-api
+  #     - traefik.http.routers.screenings-public.middlewares=strip-api@file
   #     # Public: health and swagger, /api/screenings/docs/ becomes /docs/
   #     - traefik.http.routers.screenings-docs.rule=Path(`/api/screenings/health`) || PathPrefix(`/api/screenings/docs`) || Path(`/api/screenings/openapi.json`)
   #     - traefik.http.routers.screenings-docs.middlewares=screenings-strip
@@ -168,7 +170,7 @@ services:
   #   environment:
   #     PORT: 8080
   #     DB_URL: postgres://m3d_reservations:${RESERVATIONS_DB_PASSWORD}@reservations-db:5432/m3d_reservations
-  #     SCREENINGS_URL: http://screenings:8080
+  #     SCREENINGS_URL: ${SCREENINGS_URL:-http://screenings:8080}
   #   depends_on:
   #     reservations-db:
   #       condition: service_healthy
@@ -180,7 +182,7 @@ services:
   #     - traefik.http.services.reservations.loadbalancer.server.port=8080
   #     # Protected: everything under /api/reservations
   #     - traefik.http.routers.reservations.rule=PathPrefix(`/api/reservations`)
-  #     - traefik.http.routers.reservations.middlewares=auth,strip-api
+  #     - traefik.http.routers.reservations.middlewares=auth@file,strip-api@file
   #     # Public: health and swagger, /api/reservations/docs/ becomes /docs/
   #     - traefik.http.routers.reservations-docs.rule=Path(`/api/reservations/health`) || PathPrefix(`/api/reservations/docs`) || Path(`/api/reservations/openapi.json`)
   #     - traefik.http.routers.reservations-docs.middlewares=reservations-strip
@@ -207,7 +209,7 @@ services:
   #   environment:
   #     PORT: 8080
   #     DB_URL: postgres://m3d_payments:${PAYMENTS_DB_PASSWORD}@payments-db:5432/m3d_payments
-  #     RESERVATIONS_URL: http://reservations:8080
+  #     RESERVATIONS_URL: ${RESERVATIONS_URL:-http://reservations:8080}
   #   depends_on:
   #     payments-db:
   #       condition: service_healthy
@@ -219,7 +221,7 @@ services:
   #     - traefik.http.services.payments.loadbalancer.server.port=8080
   #     # Protected: everything under /api/payments
   #     - traefik.http.routers.payments.rule=PathPrefix(`/api/payments`)
-  #     - traefik.http.routers.payments.middlewares=auth,strip-api
+  #     - traefik.http.routers.payments.middlewares=auth@file,strip-api@file
   #     # Public: health and swagger, /api/payments/docs/ becomes /docs/
   #     - traefik.http.routers.payments-docs.rule=Path(`/api/payments/health`) || PathPrefix(`/api/payments/docs`) || Path(`/api/payments/openapi.json`)
   #     - traefik.http.routers.payments-docs.middlewares=payments-strip
@@ -246,7 +248,7 @@ services:
   #   environment:
   #     PORT: 8080
   #     DB_URL: postgres://m3d_reviews:${REVIEWS_DB_PASSWORD}@reviews-db:5432/m3d_reviews
-  #     MOVIES_URL: http://movies:8080
+  #     MOVIES_URL: ${MOVIES_URL:-http://movies:8080}
   #   depends_on:
   #     reviews-db:
   #       condition: service_healthy
@@ -258,10 +260,10 @@ services:
   #     - traefik.http.services.reviews.loadbalancer.server.port=8080
   #     # Protected: everything under /api/reviews
   #     - traefik.http.routers.reviews.rule=PathPrefix(`/api/reviews`)
-  #     - traefik.http.routers.reviews.middlewares=auth,strip-api
+  #     - traefik.http.routers.reviews.middlewares=auth@file,strip-api@file
   #     # Public: GET without a token
   #     - traefik.http.routers.reviews-public.rule=Method(`GET`) && PathPrefix(`/api/reviews`)
-  #     - traefik.http.routers.reviews-public.middlewares=strip-api
+  #     - traefik.http.routers.reviews-public.middlewares=strip-api@file
   #     # Public: health and swagger, /api/reviews/docs/ becomes /docs/
   #     - traefik.http.routers.reviews-docs.rule=Path(`/api/reviews/health`) || PathPrefix(`/api/reviews/docs`) || Path(`/api/reviews/openapi.json`)
   #     - traefik.http.routers.reviews-docs.middlewares=reviews-strip
@@ -288,7 +290,7 @@ services:
   #   environment:
   #     PORT: 8080
   #     DB_URL: postgres://m3d_notifications:${NOTIFICATIONS_DB_PASSWORD}@notifications-db:5432/m3d_notifications
-  #     USERS_URL: http://users:8080
+  #     USERS_URL: ${USERS_URL:-http://users:8080}
   #   depends_on:
   #     notifications-db:
   #       condition: service_healthy
@@ -300,7 +302,7 @@ services:
   #     - traefik.http.services.notifications.loadbalancer.server.port=8080
   #     # Protected: everything under /api/notifications
   #     - traefik.http.routers.notifications.rule=PathPrefix(`/api/notifications`)
-  #     - traefik.http.routers.notifications.middlewares=auth,strip-api
+  #     - traefik.http.routers.notifications.middlewares=auth@file,strip-api@file
   #     # Public: health and swagger, /api/notifications/docs/ becomes /docs/
   #     - traefik.http.routers.notifications-docs.rule=Path(`/api/notifications/health`) || PathPrefix(`/api/notifications/docs`) || Path(`/api/notifications/openapi.json`)
   #     - traefik.http.routers.notifications-docs.middlewares=notifications-strip

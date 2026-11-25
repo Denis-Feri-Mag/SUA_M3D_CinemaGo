@@ -20,3 +20,6 @@ logs/
 *.log
 .DS_Store
 Thumbs.db
+
+# Written by dev.ps1 / dev.sh when services run locally
+traefik/local.yml

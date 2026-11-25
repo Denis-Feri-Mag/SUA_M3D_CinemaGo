@@ -32,7 +32,28 @@ Tickets and PRs use the same plain style:
 
 ## Running
 
-- Use `.\dev.ps1` (Windows) or `./dev.sh` (Mac/Linux) from the repo root, with `up`, `down`, `logs [service]`, `reset` or `ps`
+- Run `.\dev.ps1` (Windows) or `./dev.sh` (Mac/Linux) from the repo root for the menu: start all, start with some services local, stop, logs, status, reset
+- Quick commands without the menu: `up`, `down`, `logs [service]`, `reset`, `ps`
+
+## Running locally (dev only)
+
+Every call to another service uses an env variable like `USERS_URL`, never a fixed address.
+
+| Service       | URL variable      | In Docker (default)         | From a local service     | Dev port | DB port |
+|---------------|-------------------|-----------------------------|--------------------------|----------|---------|
+| users         | USERS_URL         | http://users:8080           | http://localhost:8081    | 8081     | 5432    |
+| movies        | MOVIES_URL        | http://movies:8080          | http://localhost:8082    | 8082     | 5433    |
+| screenings    | SCREENINGS_URL    | http://screenings:8080      | http://localhost:8083    | 8083     | 5434    |
+| reservations  | RESERVATIONS_URL  | http://reservations:8080    | http://localhost:8084    | 8084     | 5435    |
+| payments      | PAYMENTS_URL      | http://payments:8080        | http://localhost:8085    | 8085     | 5436    |
+| reviews       | REVIEWS_URL       | http://reviews:8080         | http://localhost:8086    | 8086     | 5437    |
+| notifications | NOTIFICATIONS_URL | http://notifications:8080   | http://localhost:8087    | 8087     | 5438    |
+
+- In Docker the defaults are set in `docker-compose.yml`, like `${MOVIES_URL:-http://movies:8080}`
+- Your `backend/<service>/.env.example` is for running locally: `PORT` is your dev port, `DB_URL` uses `localhost:<your DB port>`, other services use the "From a local service" column
+- A Docker service calling a locally running one needs `http://host.docker.internal:<port>`. When you pick local services in the menu, it sets their URL variables to that for all containers
+- `host.docker.internal` works on Linux because of `extra_hosts` in `docker-compose.dev.yml`, Docker Desktop has it built in
+- The menu also writes `traefik/local.yml` so Traefik routes `/api/<service>` to your local service. If users runs locally, the `auth` middleware calls it there too
 
 ## Networks
 
@@ -46,6 +67,7 @@ Tickets and PRs use the same plain style:
 
 - Uncomment your service, database, network and volume blocks in `docker-compose.yml`
 - Uncomment your blocks in `docker-compose.dev.yml` to get your host ports (see the README table)
+- Use `auth@file` and `strip-api@file` in your labels, they are defined in `traefik/dynamic.yml`
 - Routes are protected by default. The movies, screenings and reviews blocks show a public GET router
 
 ## Gateway (Traefik)

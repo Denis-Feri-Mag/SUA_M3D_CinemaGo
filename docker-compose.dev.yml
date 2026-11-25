@@ -6,24 +6,24 @@
 # and database also joins the normal "dev" network.
 # Uncomment your service and database below when you enable them in docker-compose.yml.
 #
-# Running one service locally:
-# Start the rest with compose, then point that service's env URLs at
-# host.docker.internal (the host machine from inside a container).
-# On Linux, add this so the name resolves:
-#   extra_hosts:
-#     - "host.docker.internal:host-gateway"
+# extra_hosts lets containers reach services running locally on your machine
+# as host.docker.internal (needed on Linux, Docker Desktop has it built in).
 
 services:
   # Traefik dashboard on http://localhost:8090
   traefik:
     ports:
       - "8090:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   users:
     ports:
       - "8081:8080"
     networks:
       - dev
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   users-db:
     ports:
       - "5432:5432"
@@ -35,6 +35,8 @@ services:
   #     - "8082:8080"
   #   networks:
   #     - dev
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
   # movies-db:
   #   ports:
   #     - "5433:5432"
@@ -46,6 +48,8 @@ services:
   #     - "8083:8080"
   #   networks:
   #     - dev
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
   # screenings-db:
   #   ports:
   #     - "5434:5432"
@@ -57,6 +61,8 @@ services:
   #     - "8084:8080"
   #   networks:
   #     - dev
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
   # reservations-db:
   #   ports:
   #     - "5435:5432"
@@ -68,6 +74,8 @@ services:
   #     - "8085:8080"
   #   networks:
   #     - dev
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
   # payments-db:
   #   ports:
   #     - "5436:5432"
@@ -79,6 +87,8 @@ services:
   #     - "8086:8080"
   #   networks:
   #     - dev
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
   # reviews-db:
   #   ports:
   #     - "5437:5432"
@@ -90,6 +100,8 @@ services:
   #     - "8087:8080"
   #   networks:
   #     - dev
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
   # notifications-db:
   #   ports:
   #     - "5438:5432"
