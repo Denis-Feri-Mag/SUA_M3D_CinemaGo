@@ -13,6 +13,17 @@ pub struct UserResponse {
     pub created_at: DateTime<Utc>,
 }
 
+// One page of GET /users
+#[derive(Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UserPage {
+    pub items: Vec<UserResponse>,
+    pub page: i64,
+    pub page_size: i64,
+    /// Number of all users
+    pub total: i64,
+}
+
 #[derive(Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginResponse {
