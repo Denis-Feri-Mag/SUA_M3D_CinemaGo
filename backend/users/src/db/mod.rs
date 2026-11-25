@@ -1,4 +1,5 @@
 pub mod refresh_token_queries;
+pub mod seed;
 pub mod user_queries;
 
 use sqlx::postgres::PgPoolOptions;

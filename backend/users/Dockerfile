@@ -10,5 +10,8 @@ RUN cargo build --release
 FROM alpine:3
 WORKDIR /app
 COPY --from=builder /app/target/release/users /app/users
+# Run as a normal user, not root
+RUN adduser -D -H app
+USER app
 EXPOSE 8080
 CMD ["/app/users"]
