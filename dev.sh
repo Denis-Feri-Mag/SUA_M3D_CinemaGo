@@ -36,9 +36,9 @@ create_env_file() {
   fi
 }
 
-# Enabled services without databases, caches and traefik
+# Enabled services without databases, caches, traefik and info
 list_services() {
-  $compose config --services 2>/dev/null | grep -v -e '-db$' -e '-cache$' -e '^traefik$' | sort
+  $compose config --services 2>/dev/null | grep -v -e '-db$' -e '-cache$' -e '^traefik$' -e '^info$' | sort
 }
 
 # Traefik routes to services running on this machine (read by Traefik from the traefik folder)
@@ -60,10 +60,22 @@ write_local_routes() {
   printf '# Written by dev.sh, deleted on the next normal start\nhttp:\n  routers:%s\n  middlewares:%s\n  services:%s\n' "$routers" "$middlewares" "$services" > "$local_routes_file"
 }
 
+# The info container prints the running services when it starts (infra/info/print-info.sh).
+# It is removed before every start, so its log only has the newest table.
+remove_info() {
+  $compose rm -fs info >/dev/null 2>&1
+}
+
+show_info() {
+  $compose wait info >/dev/null 2>&1
+  $compose logs --no-log-prefix info
+}
+
 start_all() {
   create_env_file
   rm -f "$local_routes_file"
-  $compose up --build -d && echo "Gateway: http://localhost:8080"
+  remove_info
+  $compose up --build -d && show_info
 }
 
 start_with_local_services() {
@@ -97,15 +109,13 @@ start_with_local_services() {
     url_variables+=("${upper_name}_URL=http://host.docker.internal:$(dev_port "$name")")
   done
   write_local_routes "${local_services[@]}"
-  env "${url_variables[@]}" $compose up --build -d $scale_options || return
+  remove_info
+  # LOCAL_SERVICES tells the info container which services are marked local
+  env "${url_variables[@]}" LOCAL_SERVICES="${local_services[*]}" $compose up --build -d $scale_options || return
+  show_info
 
-  echo
-  echo "Gateway: http://localhost:8080"
   for name in "${local_services[@]}"; do
-    port=$(dev_port "$name")
-    echo "$name runs locally:"
-    echo "  cd backend/$name, copy .env.example to .env and start it on port $port"
-    echo "  Swagger: http://localhost:$port/docs, through Traefik: http://localhost:8080/api/$name/..."
+    echo "Start $name yourself: cd backend/$name, copy .env.example to .env and run it on port $(dev_port "$name")"
   done
 }
 
@@ -150,7 +160,7 @@ show_menu() {
 
 case "$1" in
   "")    show_menu ;;
-  up)    create_env_file; rm -f "$local_routes_file"; $compose up --build ;;
+  up)    create_env_file; rm -f "$local_routes_file"; remove_info; $compose up --build ;;
   down)  rm -f "$local_routes_file"; $compose down ;;
   logs)  $compose logs -f $2 ;;
   reset) rm -f "$local_routes_file"; $compose down -v ;;

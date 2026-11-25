@@ -52,11 +52,23 @@ function Remove-LocalRoutes {
     if (Test-Path $localRoutesFile) { Remove-Item $localRoutesFile }
 }
 
+# The info container prints the running services when it starts (infra/info/print-info.sh).
+# It is removed before every start, so its log only has the newest table.
+function Remove-Info {
+    docker @compose rm -fs info *> $null
+}
+
+function Show-Info {
+    docker @compose wait info *> $null
+    docker @compose logs --no-log-prefix info
+}
+
 function Start-All {
     New-EnvFile
     Remove-LocalRoutes
+    Remove-Info
     docker @compose up --build -d
-    if ($LASTEXITCODE -eq 0) { Write-Host "Gateway: http://localhost:8080" }
+    if ($LASTEXITCODE -eq 0) { Show-Info }
 }
 
 function New-EnvFile {
@@ -66,10 +78,10 @@ function New-EnvFile {
     }
 }
 
-# Enabled services without databases, caches and traefik
+# Enabled services without databases, caches, traefik and info
 function Get-Services {
     $allServices = docker @compose config --services 2>$null
-    return @($allServices | Where-Object { $_ -notlike "*-db" -and $_ -notlike "*-cache" -and $_ -ne "traefik" } | Sort-Object)
+    return @($allServices | Where-Object { $_ -notlike "*-db" -and $_ -notlike "*-cache" -and $_ -ne "traefik" -and $_ -ne "info" } | Sort-Object)
 }
 
 function Start-WithLocalServices {
@@ -102,6 +114,9 @@ function Start-WithLocalServices {
         Set-Item -Path "Env:$($name.ToUpper())_URL" -Value "http://host.docker.internal:$($devPorts[$name])"
     }
     Write-LocalRoutes $localServices
+    Remove-Info
+    # LOCAL_SERVICES tells the info container which services are marked local
+    $env:LOCAL_SERVICES = $localServices -join " "
     docker @compose up --build -d @scaleOptions
     $exitCode = $LASTEXITCODE
 
@@ -109,15 +124,12 @@ function Start-WithLocalServices {
     foreach ($name in $localServices) {
         Remove-Item -Path "Env:$($name.ToUpper())_URL"
     }
+    Remove-Item -Path "Env:LOCAL_SERVICES"
     if ($exitCode -ne 0) { return }
 
-    Write-Host ""
-    Write-Host "Gateway: http://localhost:8080"
+    Show-Info
     foreach ($name in $localServices) {
-        $port = $devPorts[$name]
-        Write-Host "$name runs locally:"
-        Write-Host "  cd backend/$name, copy .env.example to .env and start it on port $port"
-        Write-Host "  Swagger: http://localhost:$port/docs, through Traefik: http://localhost:8080/api/$name/..."
+        Write-Host "Start $name yourself: cd backend/$name, copy .env.example to .env and run it on port $($devPorts[$name])"
     }
 }
 
@@ -172,6 +184,7 @@ switch ($Command) {
     "up"    {
         New-EnvFile
         Remove-LocalRoutes
+        Remove-Info
         docker @compose up --build
     }
     "down"  {
