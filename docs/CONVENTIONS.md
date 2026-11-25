@@ -34,6 +34,7 @@ Tickets and PRs use the same plain style:
 
 - Run `.\dev.ps1` (Windows) or `./dev.sh` (Mac/Linux) from the repo root for the menu: start all, start with some services local, stop, logs (Ctrl+C to quit), status, reset. It runs one option and exits
 - Quick commands without the menu: `up`, `down`, `logs [service]`, `reset`, `ps`
+- After a start the `info` container prints the running services with their URLs and ports, then stops. The table is in `infra/info/print-info.sh`
 
 ## Running locally (dev only)
 
@@ -70,6 +71,7 @@ Every call to another service uses an env variable like `USERS_URL`, never a fix
 - Uncomment your blocks in `docker-compose.dev.yml` to get your host ports (see the README table)
 - Use `auth@file` and `strip-api@file` in your labels, they are defined in `traefik/dynamic.yml`
 - Routes are protected by default. The movies, screenings and reviews blocks show a public GET router
+- Uncomment your line in `infra/info/print-info.sh` and your `depends_on` entry under `info` in `docker-compose.yml`, so the start table shows your service. If your service has a healthcheck, use `condition: service_healthy` there
 
 ## Gateway (Traefik)
 

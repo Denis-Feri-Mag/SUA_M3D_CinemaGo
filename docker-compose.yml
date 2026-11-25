@@ -347,6 +347,45 @@ services:
   #   networks:
   #     - notifications-db-net
 
+  # Prints the gateway and service URLs once everything is up, then stops.
+  # The table is in infra/info/print-info.sh. When you enable your service,
+  # uncomment its depends_on entry here and its line in that script.
+  info:
+    image: busybox:1
+    command: ["sh", "/info/print-info.sh"]
+    volumes:
+      - ./infra/info:/info:ro
+    environment:
+      # Set by the dev menu for services that run on your machine
+      LOCAL_SERVICES: ${LOCAL_SERVICES:-}
+    network_mode: none
+    restart: "no"
+    depends_on:
+      traefik:
+        condition: service_started
+      users:
+        condition: service_healthy
+        # Not needed when users runs locally (dev menu option 2)
+        required: false
+      # movies:
+      #   condition: service_started
+      #   required: false
+      # screenings:
+      #   condition: service_started
+      #   required: false
+      # reservations:
+      #   condition: service_started
+      #   required: false
+      # payments:
+      #   condition: service_started
+      #   required: false
+      # reviews:
+      #   condition: service_started
+      #   required: false
+      # notifications:
+      #   condition: service_started
+      #   required: false
+
 networks:
   public:
   backend:

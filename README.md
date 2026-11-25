@@ -7,7 +7,9 @@ Users can browse movies, see screenings, book seats, pay (simulated) and leave r
 
 1. Run `.\dev.ps1` on Windows or `./dev.sh` on Mac/Linux. It opens a menu, runs the option you pick and exits. It copies `.env.example` to `.env` if needed
 2. Choose `1` to start everything in Docker, or `2` to run some services locally (see below)
-3. Open the gateway on http://localhost:8080 (frontend port TBD)
+3. When everything is up, the `info` container prints a table with the gateway, Swagger and direct URL of every service and the database ports. Open the gateway on http://localhost:8080 (frontend port TBD)
+
+To see the table again: `docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --no-log-prefix info`.
 
 Quick commands without the menu: `up`, `down`, `logs [service]`, `reset` (also deletes the databases), `ps`. For example `.\dev.ps1 logs users`.
 
