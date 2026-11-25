@@ -36,9 +36,9 @@ create_env_file() {
   fi
 }
 
-# Enabled services without databases and traefik
+# Enabled services without databases, caches and traefik
 list_services() {
-  $compose config --services 2>/dev/null | grep -v -e '-db$' -e '^traefik$' | sort
+  $compose config --services 2>/dev/null | grep -v -e '-db$' -e '-cache$' -e '^traefik$' | sort
 }
 
 # Traefik routes to services running on this machine (read by Traefik from the traefik folder)

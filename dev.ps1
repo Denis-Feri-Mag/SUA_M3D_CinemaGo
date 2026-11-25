@@ -66,10 +66,10 @@ function New-EnvFile {
     }
 }
 
-# Enabled services without databases and traefik
+# Enabled services without databases, caches and traefik
 function Get-Services {
     $allServices = docker @compose config --services 2>$null
-    return @($allServices | Where-Object { $_ -notlike "*-db" -and $_ -ne "traefik" } | Sort-Object)
+    return @($allServices | Where-Object { $_ -notlike "*-db" -and $_ -notlike "*-cache" -and $_ -ne "traefik" } | Sort-Object)
 }
 
 function Start-WithLocalServices {

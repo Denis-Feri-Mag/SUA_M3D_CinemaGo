@@ -3,7 +3,7 @@
 # Networks:
 #   public       Traefik only, the only network with a published port
 #   backend      Traefik and all services (internal, no internet)
-#   <name>-db-net one service and its database (internal)
+#   <name>-db-net one service and its database or cache (internal)
 # To enable your service, uncomment its blocks here, in volumes, networks and in docker-compose.dev.yml.
 # Service URLs like ${MOVIES_URL:-http://movies:8080} use the container by default,
 # the dev menu sets them to host.docker.internal when that service runs locally.
@@ -42,9 +42,13 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       NOTIFICATIONS_URL: ${NOTIFICATIONS_URL:-http://notifications:8080}
       ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-15}
+      CACHE_URL: redis://users-cache:6379
+      CACHE_TTL_SECONDS: 300
     depends_on:
       users-db:
         condition: service_healthy
+      users-cache:
+        condition: service_started
     networks:
       - backend
       - users-db-net
@@ -77,6 +81,14 @@ services:
       test: ["CMD-SHELL", "pg_isready -U m3d_users -d m3d_users"]
       interval: 5s
       retries: 10
+    networks:
+      - users-db-net
+
+  # Valkey cache for users, only users can reach it (same network as its database)
+  users-cache:
+    image: valkey/valkey:8-alpine
+    # Only a cache, nothing is saved to disk
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
     networks:
       - users-db-net
 
