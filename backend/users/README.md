@@ -50,6 +50,8 @@ The table is created on startup.
 | ADMIN_EMAIL          | Admin created on start if it does not exist      |
 | ADMIN_PASSWORD       | Password for that admin (empty = no admin)       |
 | RUST_LOG             | Log level (default `info,sqlx=warn`)             |
+| RATE_LIMIT_REQUESTS  | Max auth calls per IP in the window (default 10, 0 = off) |
+| RATE_LIMIT_WINDOW_SECONDS | Length of the rate limit window (default 60) |
 
 ## Endpoints
 
@@ -81,6 +83,12 @@ Passwords are hashed with argon2 and are never returned.
 All errors are JSON like `{ "error": "user not found" }`, also for bad JSON bodies (400, 415, 422), bad path values (400) and unknown paths (404).
 
 `GET /users` returns `{ items, page, pageSize, total }`, pageSize is 1 to 100.
+
+## Rate limit
+
+`/users/register`, `/users/login` and `/users/refresh` allow `RATE_LIMIT_REQUESTS` calls per client IP and path every `RATE_LIMIT_WINDOW_SECONDS`.
+After that they return 429 `{ "error": "too many requests, try again later" }` with a `Retry-After` header (seconds).
+Behind Traefik the client IP is the last address in `X-Forwarded-For`. The counters are in memory (`src/rate_limit.rs`).
 
 ## Validation
 

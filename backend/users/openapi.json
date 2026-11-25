@@ -198,6 +198,26 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Too many requests, wait Retry-After seconds",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 0
+                },
+                "description": "Seconds to wait"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -223,7 +243,7 @@
             "description": "Password changed, log in again because old tokens stop working"
           },
           "400": {
-            "description": "New password too short",
+            "description": "New password must have 6 to 128 characters",
             "content": {
               "application/json": {
                 "schema": {
@@ -286,6 +306,26 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Too many requests, wait Retry-After seconds",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 0
+                },
+                "description": "Seconds to wait"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -329,6 +369,26 @@
           },
           "409": {
             "description": "Email already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests, wait Retry-After seconds",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 0
+                },
+                "description": "Seconds to wait"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -713,10 +773,14 @@
         ],
         "properties": {
           "newPassword": {
-            "type": "string"
+            "type": "string",
+            "example": "newsecret123",
+            "maxLength": 128,
+            "minLength": 6
           },
           "oldPassword": {
-            "type": "string"
+            "type": "string",
+            "example": "secret123"
           }
         }
       },

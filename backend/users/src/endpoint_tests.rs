@@ -6,9 +6,12 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
+use std::sync::Arc;
+
 use sqlx::postgres::PgPoolOptions;
 use tower::ServiceExt;
 
+use crate::rate_limit::RateLimiter;
 use crate::routes::create_router;
 use crate::state::AppState;
 
@@ -21,6 +24,8 @@ fn test_state(database_url: &str) -> AppState {
         http_client: reqwest::Client::new(),
         cache: None,
         cache_ttl_seconds: 300,
+        // Off here, rate_limit_returns_429 turns it on
+        rate_limiter: Arc::new(RateLimiter::new(0, 60)),
     }
 }
 
@@ -71,6 +76,25 @@ async fn register_with_short_password_returns_400() {
     let (status, body) = send(app_without_database(), request).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(body["error"].is_string());
+}
+
+#[tokio::test]
+async fn rate_limit_returns_429() {
+    let mut state = test_state("postgres://nobody@localhost:1/none");
+    state.rate_limiter = Arc::new(RateLimiter::new(2, 60));
+    let app = create_router(state);
+
+    // Bad JSON stops before the database, the limit still counts it
+    for _ in 0..2 {
+        let request = json_request("POST", "/users/login", json!("not an object"));
+        let (status, _) = send(app.clone(), request).await;
+        assert_ne!(status, StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    let request = json_request("POST", "/users/login", json!("not an object"));
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(response.headers().contains_key("retry-after"));
 }
 
 #[tokio::test]

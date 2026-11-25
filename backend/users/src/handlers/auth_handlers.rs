@@ -22,7 +22,13 @@ use crate::state::AppState;
     responses(
         (status = 201, description = "User created", body = UserResponse),
         (status = 400, description = "Invalid name, email or password", body = ErrorResponse),
-        (status = 409, description = "Email already exists", body = ErrorResponse)
+        (status = 409, description = "Email already exists", body = ErrorResponse),
+        (
+            status = 429,
+            description = "Too many requests, wait Retry-After seconds",
+            body = ErrorResponse,
+            headers(("Retry-After" = u64, description = "Seconds to wait"))
+        )
     )
 )]
 pub async fn register(
@@ -57,7 +63,13 @@ pub async fn register(
     request_body = LoginRequest,
     responses(
         (status = 200, description = "Logged in, returns an access token and a refresh token", body = LoginResponse),
-        (status = 401, description = "Wrong email or password", body = ErrorResponse)
+        (status = 401, description = "Wrong email or password", body = ErrorResponse),
+        (
+            status = 429,
+            description = "Too many requests, wait Retry-After seconds",
+            body = ErrorResponse,
+            headers(("Retry-After" = u64, description = "Seconds to wait"))
+        )
     )
 )]
 pub async fn login(
@@ -92,7 +104,13 @@ pub async fn login(
     request_body = RefreshRequest,
     responses(
         (status = 200, description = "New access token and new refresh token, the old refresh token stops working", body = RefreshResponse),
-        (status = 401, description = "Refresh token is invalid, used or expired", body = ErrorResponse)
+        (status = 401, description = "Refresh token is invalid, used or expired", body = ErrorResponse),
+        (
+            status = 429,
+            description = "Too many requests, wait Retry-After seconds",
+            body = ErrorResponse,
+            headers(("Retry-After" = u64, description = "Seconds to wait"))
+        )
     )
 )]
 pub async fn refresh(

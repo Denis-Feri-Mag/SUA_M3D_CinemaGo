@@ -8,15 +8,19 @@ mod extractors;
 mod handlers;
 mod models;
 mod openapi;
+mod rate_limit;
 mod routes;
 mod state;
 
 #[cfg(test)]
 mod endpoint_tests;
 
+use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use config::Config;
+use rate_limit::RateLimiter;
 use state::AppState;
 use tracing_subscriber::EnvFilter;
 
@@ -53,6 +57,10 @@ async fn main() {
         http_client,
         cache,
         cache_ttl_seconds: config.cache_ttl_seconds,
+        rate_limiter: Arc::new(RateLimiter::new(
+            config.rate_limit_requests,
+            config.rate_limit_window_seconds,
+        )),
     };
 
     let app = routes::create_router(state);
@@ -60,5 +68,11 @@ async fn main() {
     let address = format!("0.0.0.0:{}", config.port);
     let listener = tokio::net::TcpListener::bind(&address).await.unwrap();
     println!("users service running on {address}");
-    axum::serve(listener, app).await.unwrap();
+    // connect info gives the client address to the rate limit
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .unwrap();
 }

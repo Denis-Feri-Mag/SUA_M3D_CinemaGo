@@ -11,6 +11,8 @@ pub struct Config {
     pub cache_ttl_seconds: u64,
     pub admin_email: Option<String>,
     pub admin_password: Option<String>,
+    pub rate_limit_requests: u32,
+    pub rate_limit_window_seconds: u64,
 }
 
 impl Config {
@@ -34,6 +36,14 @@ impl Config {
                 .expect("CACHE_TTL_SECONDS must be a number"),
             admin_email: optional_env("ADMIN_EMAIL"),
             admin_password: optional_env("ADMIN_PASSWORD"),
+            rate_limit_requests: optional_env("RATE_LIMIT_REQUESTS")
+                .unwrap_or("10".to_string())
+                .parse()
+                .expect("RATE_LIMIT_REQUESTS must be a number"),
+            rate_limit_window_seconds: optional_env("RATE_LIMIT_WINDOW_SECONDS")
+                .unwrap_or("60".to_string())
+                .parse()
+                .expect("RATE_LIMIT_WINDOW_SECONDS must be a number"),
         }
     }
 }
