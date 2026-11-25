@@ -1,4 +1,5 @@
 mod auth;
+mod cache;
 mod clients;
 mod config;
 mod db;
@@ -26,12 +27,16 @@ async fn main() {
         .build()
         .expect("could not create http client");
 
+    let cache = cache::connect(&config.cache_url).await;
+
     let state = AppState {
         pool,
         jwt_secret: config.jwt_secret,
         notifications_url: config.notifications_url,
         access_token_minutes: config.access_token_minutes,
         http_client,
+        cache,
+        cache_ttl_seconds: config.cache_ttl_seconds,
     };
 
     let app = routes::create_router(state);

@@ -1,16 +1,16 @@
 use axum::http::HeaderMap;
 
 use crate::auth::jwt;
-use crate::db::user_queries;
+use crate::cache::user_cache;
 use crate::errors::ApiError;
-use crate::models::user::UserRow;
+use crate::models::user::CachedUser;
 use crate::state::AppState;
 
 // Reads "Authorization: Bearer <token>" and returns the logged in user
 pub async fn get_logged_in_user(
     headers: &HeaderMap,
     state: &AppState,
-) -> Result<UserRow, ApiError> {
+) -> Result<CachedUser, ApiError> {
     let header_value = headers
         .get("Authorization")
         .and_then(|value| value.to_str().ok())
@@ -24,7 +24,8 @@ pub async fn get_logged_in_user(
 
     let user_id: i32 = claims.sub.parse().map_err(|_| ApiError::unauthorized())?;
 
-    let user = user_queries::get_user_by_id(&state.pool, user_id)
+    // Runs on every protected request, so the user comes from the cache when possible
+    let user = user_cache::find_user(state, user_id)
         .await?
         .ok_or(ApiError::unauthorized())?;
 
@@ -37,7 +38,7 @@ pub async fn get_logged_in_user(
 }
 
 // A user can change their own account, an admin can change any account
-pub fn check_self_or_admin(logged_in_user: &UserRow, user_id: i32) -> Result<(), ApiError> {
+pub fn check_self_or_admin(logged_in_user: &CachedUser, user_id: i32) -> Result<(), ApiError> {
     if logged_in_user.id == user_id || logged_in_user.role == "admin" {
         Ok(())
     } else {

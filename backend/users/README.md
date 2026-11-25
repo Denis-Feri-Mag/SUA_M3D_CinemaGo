@@ -33,17 +33,20 @@ The table is created on startup.
 - `src/models/` database struct, requests and responses
 - `src/db/` connection pool, table creation and SQL queries
 - `src/auth/` passwords, JWT and the logged in user check
+- `src/cache/` Valkey cache for users
 - `src/clients/` calls to other services
 
 ## Env variables
 
-| Name                 | What it is                                  |
-|----------------------|---------------------------------------------|
-| PORT                 | Port the service listens on                 |
-| DB_URL               | Postgres connection string for m3d_users    |
-| JWT_SECRET           | Secret used to sign tokens                  |
-| NOTIFICATIONS_URL    | Base URL of the notifications service       |
-| ACCESS_TOKEN_MINUTES | How long an access token lasts (default 15) |
+| Name                 | What it is                                       |
+|----------------------|--------------------------------------------------|
+| PORT                 | Port the service listens on                      |
+| DB_URL               | Postgres connection string for m3d_users         |
+| JWT_SECRET           | Secret used to sign tokens                       |
+| NOTIFICATIONS_URL    | Base URL of the notifications service            |
+| ACCESS_TOKEN_MINUTES | How long an access token lasts (default 15)      |
+| CACHE_URL            | Valkey address, like `redis://localhost:6379`    |
+| CACHE_TTL_SECONDS    | How long a user stays in the cache (default 300) |
 
 ## Endpoints
 
@@ -68,6 +71,14 @@ Logout and deleting a user also remove the user's refresh tokens.
 `/auth/verify` returns 200 with `X-User-Id` and `X-User-Role` headers, or 401.
 The first registered user becomes admin.
 Passwords are hashed with argon2 and are never returned.
+
+## Cache
+
+Users are cached in Valkey (`users-cache`) under the key `users:user:<id>` for `CACHE_TTL_SECONDS`.
+The cache is used by `GET /users/{id}` and by the token check on every protected request (`/auth/verify`).
+The cached data has no password hash.
+The key is deleted when the user is changed, gets a new role, is deleted or logs out.
+If Valkey is not running, the service logs a warning and reads from the database.
 
 ## Calls to other services
 

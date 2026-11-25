@@ -29,6 +29,11 @@ services:
       - "5432:5432"
     networks:
       - dev
+  users-cache:
+    ports:
+      - "6379:6379"
+    networks:
+      - dev
 
   # movies:
   #   ports:

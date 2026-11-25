@@ -50,6 +50,7 @@ Every call to another service uses an env variable like `USERS_URL`, never a fix
 | notifications | NOTIFICATIONS_URL | http://notifications:8080   | http://localhost:8087    | 8087     | 5438    |
 
 - In Docker the defaults are set in `docker-compose.yml`, like `${MOVIES_URL:-http://movies:8080}`
+- users also has a Valkey cache `users-cache`: `redis://users-cache:6379` in Docker, `redis://localhost:6379` from a local run (dev port 6379)
 - Your `backend/<service>/.env.example` is for running locally: `PORT` is your dev port, `DB_URL` uses `localhost:<your DB port>`, other services use the "From a local service" column
 - A Docker service calling a locally running one needs `http://host.docker.internal:<port>`. When you pick local services in the menu, it sets their URL variables to that for all containers
 - `host.docker.internal` works on Linux because of `extra_hosts` in `docker-compose.dev.yml`, Docker Desktop has it built in
@@ -59,7 +60,7 @@ Every call to another service uses an env variable like `USERS_URL`, never a fix
 
 - `public`: only Traefik, it is the only container with a published port (8080)
 - `backend` (internal): Traefik and all services, services call each other here
-- `<service>-db-net` (internal): one service and its database, no other service can reach that database
+- `<service>-db-net` (internal): one service and its database (and cache), no other service can reach them
 - Internal networks have no internet. If your service calls an outside API, also add it to `public`
 - In dev every service and database also joins the `dev` network so their ports can be published
 
@@ -82,4 +83,4 @@ Every call to another service uses an env variable like `USERS_URL`, never a fix
 
 ## Ports
 
-Dev host ports and owners are in the services table in the [README](../README.md#services). Databases use host ports 5432 to 5438 in the same order. Inside docker every service listens on 8080.
+Dev host ports and owners are in the services table in the [README](../README.md#services). Databases use host ports 5432 to 5438 in the same order, the users cache uses 6379. Inside docker every service listens on 8080.
