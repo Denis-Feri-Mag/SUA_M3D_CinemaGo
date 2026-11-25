@@ -2,7 +2,7 @@ use serde_json::json;
 
 use crate::state::AppState;
 
-// Asks the notifications service (Mila) to send a welcome message.
+// Asks the notifications service to send a welcome message.
 // If it is down we only log a warning, register still works.
 pub async fn send_welcome(state: &AppState, user_id: i32, name: &str) {
     let url = format!("{}/notifications", state.notifications_url);

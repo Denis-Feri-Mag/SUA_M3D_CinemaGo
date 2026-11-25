@@ -66,7 +66,7 @@ Passwords are hashed with argon2 and are never returned.
 
 ## Calls to other services
 
-After register the service calls `POST {NOTIFICATIONS_URL}/notifications` (Mila) with `{ userId, type: "welcome", message }`.
+After register the service calls `POST {NOTIFICATIONS_URL}/notifications` with `{ userId, type: "welcome", message }`.
 If notifications is not running, it only logs a warning and register still works.
 
 ## OpenAPI
