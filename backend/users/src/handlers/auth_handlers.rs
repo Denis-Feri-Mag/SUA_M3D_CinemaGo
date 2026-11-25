@@ -3,6 +3,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
 
 use crate::auth::{current_user, jwt, password, refresh_token};
+use crate::cache::user_cache;
 use crate::clients::notifications;
 use crate::db::{refresh_token_queries, user_queries};
 use crate::errors::ApiError;
@@ -161,6 +162,8 @@ pub async fn logout(
     current_user::check_self_or_admin(&logged_in_user, user_id)?;
 
     let was_updated = user_queries::increase_token_version(&state.pool, user_id).await?;
+    // The cached user still has the old token version
+    user_cache::remove_user(&state, user_id).await;
     if !was_updated {
         return Err(ApiError::not_found());
     }

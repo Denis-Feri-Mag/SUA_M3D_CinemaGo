@@ -3,6 +3,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
 
 use crate::auth::current_user;
+use crate::cache::user_cache;
 use crate::db::user_queries;
 use crate::errors::ApiError;
 use crate::models::requests::{UpdateRoleRequest, UpdateUserRequest};
@@ -52,7 +53,7 @@ pub async fn get_user(
     Path(user_id): Path<i32>,
 ) -> Result<Json<UserResponse>, ApiError> {
     // No token needed, other services use this to check a user exists
-    let user = user_queries::get_user_by_id(&state.pool, user_id)
+    let user = user_cache::find_user(&state, user_id)
         .await?
         .ok_or(ApiError::not_found())?;
     Ok(Json(user.to_response()))
@@ -95,6 +96,7 @@ pub async fn update_user(
     let user = user_queries::update_user(&state.pool, user_id, name, &email)
         .await?
         .ok_or(ApiError::not_found())?;
+    user_cache::remove_user(&state, user_id).await;
     Ok(Json(user.to_response()))
 }
 
@@ -134,6 +136,7 @@ pub async fn update_role(
     let user = user_queries::update_role(&state.pool, user_id, &request.role)
         .await?
         .ok_or(ApiError::not_found())?;
+    user_cache::remove_user(&state, user_id).await;
     Ok(Json(user.to_response()))
 }
 
@@ -159,6 +162,7 @@ pub async fn delete_user(
     current_user::check_self_or_admin(&logged_in_user, user_id)?;
 
     let was_deleted = user_queries::delete_user(&state.pool, user_id).await?;
+    user_cache::remove_user(&state, user_id).await;
     if !was_deleted {
         return Err(ApiError::not_found());
     }

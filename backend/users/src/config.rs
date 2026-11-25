@@ -7,6 +7,8 @@ pub struct Config {
     pub jwt_secret: String,
     pub notifications_url: String,
     pub access_token_minutes: i64,
+    pub cache_url: String,
+    pub cache_ttl_seconds: u64,
 }
 
 impl Config {
@@ -23,6 +25,11 @@ impl Config {
                 .unwrap_or("15".to_string())
                 .parse()
                 .expect("ACCESS_TOKEN_MINUTES must be a number"),
+            cache_url: env::var("CACHE_URL").unwrap_or("redis://users-cache:6379".to_string()),
+            cache_ttl_seconds: env::var("CACHE_TTL_SECONDS")
+                .unwrap_or("300".to_string())
+                .parse()
+                .expect("CACHE_TTL_SECONDS must be a number"),
         }
     }
 }
