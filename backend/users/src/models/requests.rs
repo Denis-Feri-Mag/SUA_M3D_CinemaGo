@@ -2,7 +2,7 @@ use serde::Deserialize;
 use utoipa::{IntoParams, ToSchema};
 use validator::Validate;
 
-// The validate rules are checked in the handlers with request.validate(),
+// The validate rules are checked in the services with request.validate(),
 // the schema rules only show the same limits in Swagger
 
 /// Body for creating a new account.

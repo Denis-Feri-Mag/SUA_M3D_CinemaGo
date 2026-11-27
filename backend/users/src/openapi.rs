@@ -1,7 +1,7 @@
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
-use crate::handlers::{auth_handlers, health, user_handlers};
+use crate::controllers::{auth_controller, health_controller, user_controller};
 
 const API_DESCRIPTION: &str = "Users service of CinemaGo. Handles accounts, login with JWT access tokens and refresh tokens, roles, and the token check that the Traefik gateway runs before every protected request.
 
@@ -54,20 +54,20 @@ Every error from this service is JSON like `{\"error\": \"user not found\"}`. Th
         (name = "health", description = "Service status")
     ),
     paths(
-        health::health,
-        user_handlers::get_users,
-        user_handlers::get_user,
-        user_handlers::get_me,
-        user_handlers::update_me,
-        auth_handlers::register,
-        auth_handlers::login,
-        auth_handlers::refresh,
-        user_handlers::update_user,
-        user_handlers::update_role,
-        user_handlers::delete_user,
-        auth_handlers::logout,
-        auth_handlers::change_password,
-        auth_handlers::verify
+        health_controller::health,
+        user_controller::get_users,
+        user_controller::get_user,
+        user_controller::get_me,
+        user_controller::update_me,
+        auth_controller::register,
+        auth_controller::login,
+        auth_controller::refresh,
+        user_controller::update_user,
+        user_controller::update_role,
+        user_controller::delete_user,
+        auth_controller::logout,
+        auth_controller::change_password,
+        auth_controller::verify
     ),
     modifiers(&BearerAuth)
 )]

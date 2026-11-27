@@ -2,14 +2,15 @@ mod auth;
 mod cache;
 mod clients;
 mod config;
+mod controllers;
 mod db;
 mod errors;
 mod extractors;
-mod handlers;
 mod models;
 mod openapi;
 mod rate_limit;
 mod routes;
+mod services;
 mod state;
 
 #[cfg(test)]
@@ -39,7 +40,7 @@ async fn main() {
     db::create_tables(&pool).await;
     if let (Some(admin_email), Some(admin_password)) = (&config.admin_email, &config.admin_password)
     {
-        db::seed::seed_admin(&pool, admin_email, admin_password).await;
+        services::user_service::seed_admin(&pool, admin_email, admin_password).await;
     }
 
     let http_client = reqwest::Client::builder()

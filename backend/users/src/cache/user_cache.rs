@@ -1,6 +1,6 @@
 use redis::AsyncCommands;
 
-use crate::db::user_queries;
+use crate::db::user_repository;
 use crate::models::user::CachedUser;
 use crate::state::AppState;
 
@@ -15,7 +15,7 @@ pub async fn find_user(state: &AppState, user_id: i32) -> Result<Option<CachedUs
         return Ok(Some(cached_user));
     }
 
-    let user = match user_queries::get_user_by_id(&state.pool, user_id).await? {
+    let user = match user_repository::get_user_by_id(&state.pool, user_id).await? {
         Some(user_row) => user_row.to_cached_user(),
         None => return Ok(None),
     };
