@@ -22,7 +22,7 @@ impl Config {
         Config {
             port: env::var("PORT").unwrap_or("8080".to_string()),
             database_url: env::var("DB_URL").expect("DB_URL is not set"),
-            jwt_secret: env::var("JWT_SECRET").expect("JWT_SECRET is not set"),
+            jwt_secret: read_jwt_secret(optional_env("JWT_SECRET")),
             notifications_url: env::var("NOTIFICATIONS_URL")
                 .unwrap_or("http://notifications:8080".to_string()),
             access_token_minutes: env::var("ACCESS_TOKEN_MINUTES")
@@ -53,5 +53,37 @@ fn optional_env(name: &str) -> Option<String> {
     match env::var(name) {
         Ok(value) if !value.trim().is_empty() => Some(value),
         _ => None,
+    }
+}
+
+// Without a secret anyone could sign tokens, so the service does not start
+fn read_jwt_secret(value: Option<String>) -> String {
+    match check_jwt_secret(value) {
+        Ok(secret) => secret,
+        Err(message) => {
+            eprintln!("error: {message}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn check_jwt_secret(value: Option<String>) -> Result<String, String> {
+    match value {
+        Some(secret) => Ok(secret),
+        None => Err("JWT_SECRET is missing or empty, set it in .env".to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::check_jwt_secret;
+
+    #[test]
+    fn jwt_secret_must_be_set() {
+        assert!(check_jwt_secret(None).is_err());
+        assert_eq!(
+            check_jwt_secret(Some("secret".to_string())),
+            Ok("secret".to_string())
+        );
     }
 }
