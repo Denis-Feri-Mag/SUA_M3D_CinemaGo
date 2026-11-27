@@ -1,10 +1,10 @@
 mod auth;
 mod clients;
 mod config;
-mod controllers;
 mod db;
 mod errors;
 mod extractors;
+mod handlers;
 mod models;
 mod openapi;
 mod routes;

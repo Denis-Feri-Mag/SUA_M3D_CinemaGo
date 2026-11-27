@@ -1,5 +1,5 @@
 // Business rules for reservations.
-// Controllers call these functions, these functions call the repository (db/).
+// Handlers call these functions, these functions call the repository (db/).
 
 use axum::http::StatusCode;
 use validator::Validate;
