@@ -25,6 +25,7 @@ $devPorts = @{
 function Get-PublicRule($name) {
     if ($name -eq "users") { return 'Path(`/api/users/register`) || Path(`/api/users/login`) || Path(`/api/users/refresh`)' }
     if ($name -in @("movies", "screenings", "reviews")) { return "Method(``GET``) && PathPrefix(``/api/$name``)" }
+    if ($name -eq "reservations") { return 'Method(`GET`) && PathRegexp(`^/api/reservations/screenings/[0-9]+/seats$`)' }
     return ""
 }
 

@@ -45,7 +45,7 @@ fi
 service users 8081 " users-db=5432 users-cache=6379"
 # service movies 8082 " movies-db=5433"
 # service screenings 8083 " screenings-db=5434"
-# service reservations 8084 " reservations-db=5435"
+service reservations 8084 " reservations-db=5435"
 # service payments 8085 " payments-db=5436"
 # service reviews 8086 " reviews-db=5437"
 # service notifications 8087 " notifications-db=5438"

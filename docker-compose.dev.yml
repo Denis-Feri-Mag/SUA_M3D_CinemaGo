@@ -66,18 +66,18 @@ services:
   #   networks:
   #     - dev
 
-  # reservations:
-  #   ports:
-  #     - "8084:8080"
-  #   networks:
-  #     - dev
-  #   extra_hosts:
-  #     - "host.docker.internal:host-gateway"
-  # reservations-db:
-  #   ports:
-  #     - "5435:5432"
-  #   networks:
-  #     - dev
+  reservations:
+    ports:
+      - "8084:8080"
+    networks:
+      - dev
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+  reservations-db:
+    ports:
+      - "5435:5432"
+    networks:
+      - dev
 
   # payments:
   #   ports:
