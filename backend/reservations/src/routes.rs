@@ -6,32 +6,32 @@ use tracing::Level;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::{Config, SwaggerUi};
 
+use crate::controllers::{health_controller, reservation_controller};
 use crate::errors::ApiError;
-use crate::handlers::{health, reservation_handlers};
 use crate::openapi::ApiDoc;
 use crate::state::AppState;
 
 pub fn create_router(state: AppState) -> Router {
     Router::new()
-        .route("/health", get(health::health))
+        .route("/health", get(health_controller::health))
         .route(
             "/reservations",
-            get(reservation_handlers::get_reservations)
-                .post(reservation_handlers::create_reservation),
+            get(reservation_controller::get_reservations)
+                .post(reservation_controller::create_reservation),
         )
         .route(
             "/reservations/{id}",
-            get(reservation_handlers::get_reservation)
-                .put(reservation_handlers::update_reservation)
-                .delete(reservation_handlers::cancel_reservation),
+            get(reservation_controller::get_reservation)
+                .put(reservation_controller::update_reservation)
+                .delete(reservation_controller::cancel_reservation),
         )
         .route(
             "/reservations/{id}/seats/{seat_id}",
-            delete(reservation_handlers::delete_seat),
+            delete(reservation_controller::delete_seat),
         )
         .route(
             "/reservations/screenings/{screening_id}/seats",
-            get(reservation_handlers::get_taken_seats),
+            get(reservation_controller::get_taken_seats),
         )
         // Relative spec url so Swagger also works behind Traefik on /api/reservations/docs/
         .merge(

@@ -1,7 +1,7 @@
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
-use crate::handlers::{health, reservation_handlers};
+use crate::controllers::{health_controller, reservation_controller};
 
 const API_DESCRIPTION: &str = "Reservations service of CinemaGo. Users book seats for a screening, change or remove seats while the reservation is pending, and cancel it.
 
@@ -42,14 +42,14 @@ Every error from this service is JSON like `{\"error\": \"reservation not found\
         (name = "health", description = "Service status")
     ),
     paths(
-        health::health,
-        reservation_handlers::get_reservations,
-        reservation_handlers::get_reservation,
-        reservation_handlers::get_taken_seats,
-        reservation_handlers::create_reservation,
-        reservation_handlers::update_reservation,
-        reservation_handlers::cancel_reservation,
-        reservation_handlers::delete_seat
+        health_controller::health,
+        reservation_controller::get_reservations,
+        reservation_controller::get_reservation,
+        reservation_controller::get_taken_seats,
+        reservation_controller::create_reservation,
+        reservation_controller::update_reservation,
+        reservation_controller::cancel_reservation,
+        reservation_controller::delete_seat
     ),
     modifiers(&BearerAuth)
 )]

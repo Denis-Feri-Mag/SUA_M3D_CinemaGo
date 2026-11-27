@@ -37,8 +37,8 @@ pub fn from_headers(headers: &HeaderMap) -> Result<CurrentUser, ApiError> {
     })
 }
 
-// Lets a handler take `current_user: CurrentUser` as an argument,
-// a missing or bad header becomes 401 before the handler runs
+// Lets a controller take `current_user: CurrentUser` as an argument,
+// a missing or bad header becomes 401 before the controller runs
 impl<S: Send + Sync> FromRequestParts<S> for CurrentUser {
     type Rejection = ApiError;
 
