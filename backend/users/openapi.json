@@ -2,20 +2,17 @@
   "openapi": "3.1.0",
   "info": {
     "title": "CinemaGo users service",
-    "description": "",
-    "license": {
-      "name": ""
-    },
+    "description": "Users service of CinemaGo. Handles accounts, login with JWT access tokens and refresh tokens, roles, and the token check that the Traefik gateway runs before every protected request.\n\n## How to log in\n\n1. `POST /users/register` with name, email and password (or use the admin from ADMIN_EMAIL and ADMIN_PASSWORD).\n2. `POST /users/login` returns `token` (access token, valid ACCESS_TOKEN_MINUTES, default 15) and `refreshToken` (valid 7 days, works once).\n3. Send `Authorization: Bearer <token>` on protected calls (use the Authorize button).\n4. When the access token expires, `POST /users/refresh` with the refresh token gives new tokens.\n\nLogout (`DELETE /users/{id}/sessions`), a password change and deleting the user make all older tokens stop working.\n\n## Gateway\n\nThrough Traefik (server `/api`, for example `http://localhost:8080/api/users/login`) register, login and refresh are public, everything else needs a token. For other services Traefik calls `GET /auth/verify` and passes `X-User-Id` and `X-User-Role` on.\n\n## Roles\n\n`user` can read and change only their own account. `admin` can list all users, change roles and change or delete any user. There is always at least one admin: the last admin cannot be deleted or made a user.\n\n## Rate limit\n\nRegister, login and refresh allow RATE_LIMIT_REQUESTS calls (default 10) per client IP and path in RATE_LIMIT_WINDOW_SECONDS (default 60). After that they answer 429 with a `Retry-After` header in seconds.\n\n## Validation\n\nName 1 to 100 characters (not only spaces), a valid email (saved in lowercase, unique), password 6 to 128 characters. Broken rules return 400 like `{\"error\": \"email: must be a valid email\"}`.\n\n## Errors\n\nEvery error from this service is JSON like `{\"error\": \"user not found\"}`. This includes bad JSON bodies (400, 415, 422), bad path or query values (400) and unknown paths (404). When the service is down, the gateway itself answers 502 or 503 without a JSON body.",
     "version": "1.0.0"
   },
   "servers": [
     {
       "url": "/",
-      "description": "Direct to the users service"
+      "description": "Direct to the users service (dev port 8081)"
     },
     {
       "url": "/api",
-      "description": "Through the Traefik gateway"
+      "description": "Through the Traefik gateway (port 8080)"
     }
   ],
   "paths": {
@@ -24,32 +21,50 @@
         "tags": [
           "auth"
         ],
+        "summary": "Check a token (used by Traefik)",
+        "description": "Traefik ForwardAuth calls this before every protected request through the gateway. When the bearer token is valid it answers 200 with the X-User-Id and X-User-Role headers, which Traefik copies to the target service. Otherwise it answers 401 and Traefik returns that 401 to the client.\n\nThe token is checked for signature, expiry, an existing user and the current token version (logout and password change make old tokens invalid). Not routed through the gateway, it is only called inside docker.",
         "operationId": "verify",
         "responses": {
           "200": {
-            "description": "Token is valid, used by Traefik ForwardAuth",
+            "description": "Token is valid. No body.",
             "headers": {
               "X-User-Id": {
                 "schema": {
                   "type": "integer",
                   "format": "int32"
                 },
-                "description": "Id of the logged in user"
+                "description": "Id of the logged in user, for example 7"
               },
               "X-User-Role": {
                 "schema": {
                   "type": "string"
                 },
-                "description": "user or admin"
+                "description": "`user` or `admin`"
               }
             }
           },
           "401": {
-            "description": "Missing or invalid token",
+            "description": "The bearer token is missing, expired, invalid, or was logged out (logout, password change and deleting the user make old tokens stop working).",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "missing or invalid token"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -67,6 +82,8 @@
         "tags": [
           "health"
         ],
+        "summary": "Health check",
+        "description": "Returns `{\"status\":\"ok\"}` when the service is running. No token needed. Docker and Traefik use it to know when the service is ready.",
         "operationId": "health",
         "responses": {
           "200": {
@@ -75,6 +92,9 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HealthResponse"
+                },
+                "example": {
+                  "status": "ok"
                 }
               }
             }
@@ -85,37 +105,41 @@
     "/users": {
       "get": {
         "tags": [
-          "users"
+          "admin"
         ],
+        "summary": "List all users",
+        "description": "Returns one page of all users, sorted by id.\n\n**Who can call it:** admins only. Send `Authorization: Bearer <token>` from login.",
         "operationId": "get_users",
         "parameters": [
           {
             "name": "page",
             "in": "query",
-            "description": "Page number, starts at 1 (default 1)",
+            "description": "Page number, starts at 1. Default 1.",
             "required": false,
             "schema": {
               "type": "integer",
               "format": "int64",
               "minimum": 1
-            }
+            },
+            "example": 1
           },
           {
             "name": "pageSize",
             "in": "query",
-            "description": "Users per page, 1 to 100 (default 20)",
+            "description": "Users per page, 1 to 100. Default 20.",
             "required": false,
             "schema": {
               "type": "integer",
               "format": "int64",
               "maximum": 100,
               "minimum": 1
-            }
+            },
+            "example": 20
           }
         ],
         "responses": {
           "200": {
-            "description": "One page of users (admin only)",
+            "description": "One page of users.",
             "content": {
               "application/json": {
                 "schema": {
@@ -125,31 +149,64 @@
             }
           },
           "400": {
-            "description": "Bad page or pageSize",
+            "description": "`page` or `pageSize` is out of range or not a number.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "Not a number": {
+                    "summary": "page is not a number",
+                    "value": {
+                      "error": "Failed to deserialize query string: page: invalid digit found in string"
+                    }
+                  },
+                  "Out of range": {
+                    "summary": "page below 1 or pageSize not 1 to 100",
+                    "value": {
+                      "error": "page must be at least 1 and pageSize 1 to 100"
+                    }
+                  }
                 }
               }
             }
           },
           "401": {
-            "description": "Missing or invalid token",
+            "description": "The bearer token is missing, expired, invalid, or was logged out (logout, password change and deleting the user make old tokens stop working).",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "missing or invalid token"
                 }
               }
             }
           },
           "403": {
-            "description": "Not an admin",
+            "description": "You are logged in but not an admin.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "not allowed"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -165,14 +222,21 @@
     "/users/login": {
       "post": {
         "tags": [
-          "users"
+          "auth"
         ],
+        "summary": "Log in",
+        "description": "Checks email and password and returns an access token, a refresh token and the user. No token needed (public through the gateway).\n\nThe access token is a JWT valid for ACCESS_TOKEN_MINUTES (default 15). Send it as `Authorization: Bearer <token>` on protected calls. The refresh token is valid 7 days and works once, use it with POST /users/refresh.\n\n**Rate limit:** RATE_LIMIT_REQUESTS calls per IP in RATE_LIMIT_WINDOW_SECONDS (default 10 per 60 seconds), then 429 with a Retry-After header. Behind Traefik the IP is the last address in X-Forwarded-For.",
         "operationId": "login",
         "requestBody": {
+          "description": "Email and password.",
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/LoginRequest"
+              },
+              "example": {
+                "email": "user@example.com",
+                "password": "secret123"
               }
             }
           },
@@ -180,7 +244,7 @@
         },
         "responses": {
           "200": {
-            "description": "Logged in, returns an access token and a refresh token",
+            "description": "Logged in.",
             "content": {
               "application/json": {
                 "schema": {
@@ -189,18 +253,60 @@
               }
             }
           },
-          "401": {
-            "description": "Wrong email or password",
+          "400": {
+            "description": "The body is not valid JSON.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Failed to parse the request body as JSON: key must be a string at line 1 column 2"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No account with this email, or the password is wrong. Both give the same message on purpose.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "wrong email or password"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not sent as JSON (missing `Content-Type: application/json`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Expected request with `Content-Type: application/json`"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The JSON is valid but a field is missing or has the wrong type.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Failed to deserialize the JSON body into the target type: missing field `password` at line 1 column 2"
                 }
               }
             }
           },
           "429": {
-            "description": "Too many requests, wait Retry-After seconds",
+            "description": "Rate limit: more than RATE_LIMIT_REQUESTS calls (default 10) from the same IP to this path in RATE_LIMIT_WINDOW_SECONDS (default 60). Wait the number of seconds in Retry-After.",
             "headers": {
               "Retry-After": {
                 "schema": {
@@ -208,13 +314,29 @@
                   "format": "int64",
                   "minimum": 0
                 },
-                "description": "Seconds to wait"
+                "description": "Seconds to wait before the next try"
               }
             },
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "too many requests, try again later"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -225,26 +347,51 @@
     "/users/me": {
       "get": {
         "tags": [
-          "users"
+          "me"
         ],
+        "summary": "Get my account",
+        "description": "Returns the user of the bearer token.\n\n**Who can call it:** any logged in user. Send `Authorization: Bearer <token>` from login.",
         "operationId": "get_me",
         "responses": {
           "200": {
-            "description": "The logged in user",
+            "description": "The logged in user.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserResponse"
+                },
+                "example": {
+                  "createdAt": "2026-11-20T10:15:00Z",
+                  "email": "user@example.com",
+                  "id": 7,
+                  "name": "Test User",
+                  "role": "user"
                 }
               }
             }
           },
           "401": {
-            "description": "Missing or invalid token",
+            "description": "The bearer token is missing, expired, invalid, or was logged out (logout, password change and deleting the user make old tokens stop working).",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "missing or invalid token"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -258,14 +405,21 @@
       },
       "put": {
         "tags": [
-          "users"
+          "me"
         ],
+        "summary": "Change my name and email",
+        "description": "Same as PUT /users/{id} with your own id, without needing to know it.\n\n**Who can call it:** any logged in user. Send `Authorization: Bearer <token>` from login.\n\n**Rules:** name 1 to 100 characters (not only spaces), a valid email that no other account uses. The email is saved in lowercase.",
         "operationId": "update_me",
         "requestBody": {
+          "description": "New name and email.",
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UpdateUserRequest"
+              },
+              "example": {
+                "email": "user@example.com",
+                "name": "Test User"
               }
             }
           },
@@ -273,41 +427,113 @@
         },
         "responses": {
           "200": {
-            "description": "Profile updated",
+            "description": "Account changed.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserResponse"
+                },
+                "example": {
+                  "createdAt": "2026-11-20T10:15:00Z",
+                  "email": "user@example.com",
+                  "id": 7,
+                  "name": "Test User",
+                  "role": "user"
                 }
               }
             }
           },
           "400": {
-            "description": "Invalid name or email",
+            "description": "Name or email breaks a rule.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "Bad JSON": {
+                    "summary": "The body is not valid JSON",
+                    "value": {
+                      "error": "Failed to parse the request body as JSON: key must be a string at line 1 column 2"
+                    }
+                  },
+                  "Bad email": {
+                    "summary": "Email is not valid",
+                    "value": {
+                      "error": "email: must be a valid email"
+                    }
+                  },
+                  "Bad name": {
+                    "summary": "Name is empty, only spaces or too long",
+                    "value": {
+                      "error": "name: must have 1 to 100 characters"
+                    }
+                  }
                 }
               }
             }
           },
           "401": {
-            "description": "Missing or invalid token",
+            "description": "The bearer token is missing, expired, invalid, or was logged out (logout, password change and deleting the user make old tokens stop working).",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "missing or invalid token"
                 }
               }
             }
           },
           "409": {
-            "description": "Email already exists",
+            "description": "Another account already uses this email.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "email already exists"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not sent as JSON (missing `Content-Type: application/json`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Expected request with `Content-Type: application/json`"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The JSON is valid but a field is missing or has the wrong type.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Failed to deserialize the JSON body into the target type: missing field `email` at line 1 column 2"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -323,14 +549,21 @@
     "/users/me/password": {
       "put": {
         "tags": [
-          "users"
+          "me"
         ],
+        "summary": "Change my password",
+        "description": "Changes the password of the logged in user. The old password must be correct and the new one must have 6 to 128 characters.\n\nAfter the change all refresh tokens are deleted and old access tokens stop working, so log in again with the new password.\n\n**Who can call it:** any logged in user, only for their own account. Send `Authorization: Bearer <token>` from login.",
         "operationId": "change_password",
         "requestBody": {
+          "description": "Old and new password.",
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ChangePasswordRequest"
+              },
+              "example": {
+                "newPassword": "newsecret123",
+                "oldPassword": "secret123"
               }
             }
           },
@@ -338,24 +571,80 @@
         },
         "responses": {
           "204": {
-            "description": "Password changed, log in again because old tokens stop working"
+            "description": "Password changed. No body."
           },
           "400": {
-            "description": "New password must have 6 to 128 characters",
+            "description": "The new password is too short or too long, or the body is not valid JSON.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "newPassword: must have 6 to 128 characters"
                 }
               }
             }
           },
           "401": {
-            "description": "Missing or invalid token, or wrong old password",
+            "description": "The token is missing or invalid, or the old password is wrong.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "Bad token": {
+                    "summary": "Missing or invalid token",
+                    "value": {
+                      "error": "missing or invalid token"
+                    }
+                  },
+                  "Wrong old password": {
+                    "summary": "oldPassword does not match",
+                    "value": {
+                      "error": "old password is wrong"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not sent as JSON (missing `Content-Type: application/json`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Expected request with `Content-Type: application/json`"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The JSON is valid but a field is missing or has the wrong type.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Failed to deserialize the JSON body into the target type: missing field `newPassword` at line 1 column 2"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -371,10 +660,13 @@
     "/users/refresh": {
       "post": {
         "tags": [
-          "users"
+          "auth"
         ],
+        "summary": "Get new tokens with a refresh token",
+        "description": "Trades a refresh token for a new access token and a new refresh token. No access token needed (public through the gateway).\n\nEach refresh token works only once: after this call the old one is deleted. Refresh tokens are valid 7 days and are removed on logout, password change and when the user is deleted.\n\n**Rate limit:** RATE_LIMIT_REQUESTS calls per IP in RATE_LIMIT_WINDOW_SECONDS (default 10 per 60 seconds), then 429 with a Retry-After header. Behind Traefik the IP is the last address in X-Forwarded-For.",
         "operationId": "refresh",
         "requestBody": {
+          "description": "The refresh token from login or from the last refresh.",
           "content": {
             "application/json": {
               "schema": {
@@ -386,7 +678,7 @@
         },
         "responses": {
           "200": {
-            "description": "New access token and new refresh token, the old refresh token stops working",
+            "description": "New tokens, the old refresh token stops working.",
             "content": {
               "application/json": {
                 "schema": {
@@ -395,18 +687,60 @@
               }
             }
           },
-          "401": {
-            "description": "Refresh token is invalid, used or expired",
+          "400": {
+            "description": "The body is not valid JSON.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Failed to parse the request body as JSON: key must be a string at line 1 column 2"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The refresh token is unknown, already used, expired, or its user was deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "invalid refresh token"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not sent as JSON (missing `Content-Type: application/json`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Expected request with `Content-Type: application/json`"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The JSON is valid but a field is missing or has the wrong type.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Failed to deserialize the JSON body into the target type: missing field `refreshToken` at line 1 column 2"
                 }
               }
             }
           },
           "429": {
-            "description": "Too many requests, wait Retry-After seconds",
+            "description": "Rate limit: more than RATE_LIMIT_REQUESTS calls (default 10) from the same IP to this path in RATE_LIMIT_WINDOW_SECONDS (default 60). Wait the number of seconds in Retry-After.",
             "headers": {
               "Retry-After": {
                 "schema": {
@@ -414,13 +748,29 @@
                   "format": "int64",
                   "minimum": 0
                 },
-                "description": "Seconds to wait"
+                "description": "Seconds to wait before the next try"
               }
             },
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "too many requests, try again later"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -431,14 +781,22 @@
     "/users/register": {
       "post": {
         "tags": [
-          "users"
+          "auth"
         ],
+        "summary": "Create an account",
+        "description": "Creates a new user. No token needed (public through the gateway).\n\n**Rules:** name 1 to 100 characters (not only spaces), a valid email that is not used yet (saved in lowercase), password 6 to 128 characters. The very first user becomes `admin` when no admin was created from ADMIN_EMAIL, everyone else gets `user`.\n\nAfter register the service sends a welcome message to the notifications service. If notifications is down, register still works.\n\n**Rate limit:** RATE_LIMIT_REQUESTS calls per IP in RATE_LIMIT_WINDOW_SECONDS (default 10 per 60 seconds), then 429 with a Retry-After header. Behind Traefik the IP is the last address in X-Forwarded-For.",
         "operationId": "register",
         "requestBody": {
+          "description": "Name, email and password of the new account.",
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RegisterRequest"
+              },
+              "example": {
+                "email": "user@example.com",
+                "name": "Test User",
+                "password": "secret123"
               }
             }
           },
@@ -446,37 +804,105 @@
         },
         "responses": {
           "201": {
-            "description": "User created",
+            "description": "Account created. Log in next to get a token.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserResponse"
+                },
+                "example": {
+                  "createdAt": "2026-11-20T10:15:00Z",
+                  "email": "user@example.com",
+                  "id": 7,
+                  "name": "Test User",
+                  "role": "user"
                 }
               }
             }
           },
           "400": {
-            "description": "Invalid name, email or password",
+            "description": "Name, email or password breaks a rule. Several problems are joined with a comma.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "Bad JSON": {
+                    "summary": "The body is not valid JSON",
+                    "value": {
+                      "error": "Failed to parse the request body as JSON: key must be a string at line 1 column 2"
+                    }
+                  },
+                  "Bad email": {
+                    "summary": "Email is not valid",
+                    "value": {
+                      "error": "email: must be a valid email"
+                    }
+                  },
+                  "Bad name": {
+                    "summary": "Name is empty, only spaces or too long",
+                    "value": {
+                      "error": "name: must have 1 to 100 characters"
+                    }
+                  },
+                  "Only spaces": {
+                    "summary": "Name has only spaces",
+                    "value": {
+                      "error": "name: is required"
+                    }
+                  },
+                  "Short password": {
+                    "summary": "Password has fewer than 6 characters",
+                    "value": {
+                      "error": "password: must have 6 to 128 characters"
+                    }
+                  }
                 }
               }
             }
           },
           "409": {
-            "description": "Email already exists",
+            "description": "Another account already uses this email.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "email already exists"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not sent as JSON (missing `Content-Type: application/json`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Expected request with `Content-Type: application/json`"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The JSON is valid but a field is missing or has the wrong type.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Failed to deserialize the JSON body into the target type: missing field `password` at line 1 column 2"
                 }
               }
             }
           },
           "429": {
-            "description": "Too many requests, wait Retry-After seconds",
+            "description": "Rate limit: more than RATE_LIMIT_REQUESTS calls (default 10) from the same IP to this path in RATE_LIMIT_WINDOW_SECONDS (default 60). Wait the number of seconds in Retry-After.",
             "headers": {
               "Retry-After": {
                 "schema": {
@@ -484,13 +910,29 @@
                   "format": "int64",
                   "minimum": 0
                 },
-                "description": "Seconds to wait"
+                "description": "Seconds to wait before the next try"
               }
             },
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "too many requests, try again later"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -503,6 +945,8 @@
         "tags": [
           "users"
         ],
+        "summary": "Get one user",
+        "description": "Returns one user by id. Read from the Valkey cache when possible.\n\n**Who can call it:** inside docker every service can call it without a token (`http://users:8080/users/{id}`), for example to check that a user exists. Through the gateway (`/api/users/{id}`) any logged in user can call it with a bearer token.",
         "operationId": "get_user",
         "parameters": [
           {
@@ -513,26 +957,76 @@
             "schema": {
               "type": "integer",
               "format": "int32"
-            }
+            },
+            "example": 7
           }
         ],
         "responses": {
           "200": {
-            "description": "One user",
+            "description": "The user.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserResponse"
+                },
+                "example": {
+                  "createdAt": "2026-11-20T10:15:00Z",
+                  "email": "user@example.com",
+                  "id": 7,
+                  "name": "Test User",
+                  "role": "user"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The id in the path is not a whole number.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Invalid URL: Cannot parse `abc` to a `i32`"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Only through the gateway: the bearer token is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "missing or invalid token"
                 }
               }
             }
           },
           "404": {
-            "description": "User not found",
+            "description": "No user with this id.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "user not found"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -543,6 +1037,8 @@
         "tags": [
           "users"
         ],
+        "summary": "Change name and email of a user",
+        "description": "Replaces the name and email of a user. Both fields are required.\n\n**Who can call it:** the user themselves, or an admin for any user. Send `Authorization: Bearer <token>` from login.\n\n**Rules:** name 1 to 100 characters (not only spaces), a valid email that no other account uses. The email is saved in lowercase.",
         "operationId": "update_user",
         "parameters": [
           {
@@ -553,14 +1049,20 @@
             "schema": {
               "type": "integer",
               "format": "int32"
-            }
+            },
+            "example": 7
           }
         ],
         "requestBody": {
+          "description": "New name and email.",
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UpdateUserRequest"
+              },
+              "example": {
+                "email": "user@example.com",
+                "name": "Test User"
               }
             }
           },
@@ -568,61 +1070,145 @@
         },
         "responses": {
           "200": {
-            "description": "User updated",
+            "description": "User changed.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserResponse"
+                },
+                "example": {
+                  "createdAt": "2026-11-20T10:15:00Z",
+                  "email": "user@example.com",
+                  "id": 7,
+                  "name": "Test User",
+                  "role": "user"
                 }
               }
             }
           },
           "400": {
-            "description": "Invalid name or email",
+            "description": "Bad id, or name or email breaks a rule.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "Bad JSON": {
+                    "summary": "The body is not valid JSON",
+                    "value": {
+                      "error": "Failed to parse the request body as JSON: key must be a string at line 1 column 2"
+                    }
+                  },
+                  "Bad email": {
+                    "summary": "Email is not valid",
+                    "value": {
+                      "error": "email: must be a valid email"
+                    }
+                  },
+                  "Bad id": {
+                    "summary": "The id in the path is not a whole number",
+                    "value": {
+                      "error": "Invalid URL: Cannot parse `abc` to a `i32`"
+                    }
+                  },
+                  "Bad name": {
+                    "summary": "Name is empty, only spaces or too long",
+                    "value": {
+                      "error": "name: must have 1 to 100 characters"
+                    }
+                  }
                 }
               }
             }
           },
           "401": {
-            "description": "Missing or invalid token",
+            "description": "The bearer token is missing, expired, invalid, or was logged out (logout, password change and deleting the user make old tokens stop working).",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "missing or invalid token"
                 }
               }
             }
           },
           "403": {
-            "description": "Not your account",
+            "description": "The id is not your own and you are not an admin.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "not allowed"
                 }
               }
             }
           },
           "404": {
-            "description": "User not found",
+            "description": "No user with this id.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "user not found"
                 }
               }
             }
           },
           "409": {
-            "description": "Email already exists",
+            "description": "Another account already uses this email.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "email already exists"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not sent as JSON (missing `Content-Type: application/json`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Expected request with `Content-Type: application/json`"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The JSON is valid but a field is missing or has the wrong type.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Failed to deserialize the JSON body into the target type: missing field `email` at line 1 column 2"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -638,6 +1224,8 @@
         "tags": [
           "users"
         ],
+        "summary": "Delete a user",
+        "description": "Deletes the account and its refresh tokens. Old access tokens of this user stop working.\n\n**Who can call it:** the user themselves, or an admin for any user. Send `Authorization: Bearer <token>` from login.\n\nThe last admin cannot be deleted.",
         "operationId": "delete_user",
         "parameters": [
           {
@@ -648,49 +1236,88 @@
             "schema": {
               "type": "integer",
               "format": "int32"
-            }
+            },
+            "example": 7
           }
         ],
         "responses": {
           "204": {
-            "description": "User deleted"
+            "description": "User deleted. No body."
           },
-          "401": {
-            "description": "Missing or invalid token",
+          "400": {
+            "description": "The id in the path is not a whole number.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Invalid URL: Cannot parse `abc` to a `i32`"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The bearer token is missing, expired, invalid, or was logged out (logout, password change and deleting the user make old tokens stop working).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "missing or invalid token"
                 }
               }
             }
           },
           "403": {
-            "description": "Not your account",
+            "description": "The id is not your own and you are not an admin.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "not allowed"
                 }
               }
             }
           },
           "404": {
-            "description": "User not found",
+            "description": "No user with this id.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "user not found"
                 }
               }
             }
           },
           "409": {
-            "description": "Cannot delete the last admin",
+            "description": "This is the last admin.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "cannot remove the last admin"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -706,8 +1333,10 @@
     "/users/{id}/role": {
       "put": {
         "tags": [
-          "users"
+          "admin"
         ],
+        "summary": "Change the role of a user",
+        "description": "Makes a user an `admin` or a normal `user`. The new role is in tokens issued after this call, old tokens still have the old role until they expire.\n\n**Who can call it:** admins only. Send `Authorization: Bearer <token>` from login.\n\n**Rules:** the role must be `user` or `admin`. The last admin cannot be made a normal user, there is always at least one admin.",
         "operationId": "update_role",
         "parameters": [
           {
@@ -718,14 +1347,19 @@
             "schema": {
               "type": "integer",
               "format": "int32"
-            }
+            },
+            "example": 7
           }
         ],
         "requestBody": {
+          "description": "The new role.",
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UpdateRoleRequest"
+              },
+              "example": {
+                "role": "admin"
               }
             }
           },
@@ -733,61 +1367,133 @@
         },
         "responses": {
           "200": {
-            "description": "Role changed",
+            "description": "Role changed.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserResponse"
+                },
+                "example": {
+                  "createdAt": "2026-11-20T10:15:00Z",
+                  "email": "user@example.com",
+                  "id": 7,
+                  "name": "Test User",
+                  "role": "admin"
                 }
               }
             }
           },
           "400": {
-            "description": "Role must be user or admin",
+            "description": "Unknown role or bad id.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "Bad id": {
+                    "summary": "The id in the path is not a whole number",
+                    "value": {
+                      "error": "Invalid URL: Cannot parse `abc` to a `i32`"
+                    }
+                  },
+                  "Bad role": {
+                    "summary": "Role is not user or admin",
+                    "value": {
+                      "error": "role must be user or admin"
+                    }
+                  }
                 }
               }
             }
           },
           "401": {
-            "description": "Missing or invalid token",
+            "description": "The bearer token is missing, expired, invalid, or was logged out (logout, password change and deleting the user make old tokens stop working).",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "missing or invalid token"
                 }
               }
             }
           },
           "403": {
-            "description": "Not an admin",
+            "description": "You are logged in but not an admin.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "not allowed"
                 }
               }
             }
           },
           "404": {
-            "description": "User not found",
+            "description": "No user with this id.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "user not found"
                 }
               }
             }
           },
           "409": {
-            "description": "Cannot remove the last admin",
+            "description": "This is the last admin and the new role is user.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "cannot remove the last admin"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not sent as JSON (missing `Content-Type: application/json`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Expected request with `Content-Type: application/json`"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The JSON is valid but a field is missing or has the wrong type.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Failed to deserialize the JSON body into the target type: missing field `role` at line 1 column 2"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -803,8 +1509,10 @@
     "/users/{id}/sessions": {
       "delete": {
         "tags": [
-          "users"
+          "auth"
         ],
+        "summary": "Log out everywhere",
+        "description": "Logs a user out on all devices: all access tokens issued before this call stop working and all refresh tokens are deleted.\n\n**Who can call it:** the user themselves, or an admin for any user. Send `Authorization: Bearer <token>` from login.",
         "operationId": "logout",
         "parameters": [
           {
@@ -815,39 +1523,75 @@
             "schema": {
               "type": "integer",
               "format": "int32"
-            }
+            },
+            "example": 7
           }
         ],
         "responses": {
           "204": {
-            "description": "Logged out, all old access and refresh tokens stop working"
+            "description": "Logged out. No body."
           },
-          "401": {
-            "description": "Missing or invalid token",
+          "400": {
+            "description": "The id in the path is not a whole number.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Invalid URL: Cannot parse `abc` to a `i32`"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The bearer token is missing, expired, invalid, or was logged out (logout, password change and deleting the user make old tokens stop working).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "missing or invalid token"
                 }
               }
             }
           },
           "403": {
-            "description": "Not your account",
+            "description": "The id is not your own and you are not an admin.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "not allowed"
                 }
               }
             }
           },
           "404": {
-            "description": "User not found",
+            "description": "No user with this id.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "user not found"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -865,6 +1609,7 @@
     "schemas": {
       "ChangePasswordRequest": {
         "type": "object",
+        "description": "Body for changing the own password.",
         "required": [
           "oldPassword",
           "newPassword"
@@ -872,40 +1617,49 @@
         "properties": {
           "newPassword": {
             "type": "string",
+            "description": "The new password, 6 to 128 characters.",
             "example": "newsecret123",
             "maxLength": 128,
             "minLength": 6
           },
           "oldPassword": {
             "type": "string",
+            "description": "The current password.",
             "example": "secret123"
           }
         }
       },
       "ErrorResponse": {
         "type": "object",
+        "description": "Every error in this service has this shape.",
         "required": [
           "error"
         ],
         "properties": {
           "error": {
-            "type": "string"
+            "type": "string",
+            "description": "Short message that says what went wrong.",
+            "example": "user not found"
           }
         }
       },
       "HealthResponse": {
         "type": "object",
+        "description": "Health check answer.",
         "required": [
           "status"
         ],
         "properties": {
           "status": {
-            "type": "string"
+            "type": "string",
+            "description": "Always `ok` when the service is running.",
+            "example": "ok"
           }
         }
       },
       "LoginRequest": {
         "type": "object",
+        "description": "Body for logging in.",
         "required": [
           "email",
           "password"
@@ -913,16 +1667,19 @@
         "properties": {
           "email": {
             "type": "string",
-            "example": "ana@example.com"
+            "description": "Email of the account, upper or lower case does not matter.",
+            "example": "user@example.com"
           },
           "password": {
             "type": "string",
+            "description": "Password of the account.",
             "example": "secret123"
           }
         }
       },
       "LoginResponse": {
         "type": "object",
+        "description": "Tokens and the user after a successful login.",
         "required": [
           "token",
           "refreshToken",
@@ -930,44 +1687,58 @@
         ],
         "properties": {
           "refreshToken": {
-            "type": "string"
+            "type": "string",
+            "description": "Refresh token, valid 7 days and only once. Send it to POST /users/refresh when the access token expires.",
+            "example": "6f1c2a9e0b7d4c3fa8e5d2b1c0f9e8d76a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d"
           },
           "token": {
-            "type": "string"
+            "type": "string",
+            "description": "Access token (JWT), valid for ACCESS_TOKEN_MINUTES (default 15). Send it as `Authorization: Bearer <token>`.",
+            "example": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI3Iiwicm9sZSI6InVzZXIifQ.signature"
           },
           "user": {
-            "$ref": "#/components/schemas/UserResponse"
+            "$ref": "#/components/schemas/UserResponse",
+            "description": "The logged in user."
           }
         }
       },
       "RefreshRequest": {
         "type": "object",
+        "description": "Body for getting new tokens.",
         "required": [
           "refreshToken"
         ],
         "properties": {
           "refreshToken": {
-            "type": "string"
+            "type": "string",
+            "description": "Refresh token from login or from the last refresh. Each one works only once.",
+            "example": "6f1c2a9e0b7d4c3fa8e5d2b1c0f9e8d76a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d"
           }
         }
       },
       "RefreshResponse": {
         "type": "object",
+        "description": "New tokens after a refresh.",
         "required": [
           "token",
           "refreshToken"
         ],
         "properties": {
           "refreshToken": {
-            "type": "string"
+            "type": "string",
+            "description": "New refresh token, the old one no longer works.",
+            "example": "0a9b8c7d6e5f4a3b2c1d6f1c2a9e0b7d4c3fa8e5d2b1c0f9e8d76a5b4c3d2e1f"
           },
           "token": {
-            "type": "string"
+            "type": "string",
+            "description": "New access token (JWT).",
+            "example": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI3Iiwicm9sZSI6InVzZXIifQ.signature"
           }
         }
       },
       "RegisterRequest": {
         "type": "object",
+        "description": "Body for creating a new account.",
         "required": [
           "name",
           "email",
@@ -977,16 +1748,19 @@
           "email": {
             "type": "string",
             "format": "email",
-            "example": "ana@example.com"
+            "description": "Email used to log in. Must be valid and not used by another account, saved in lowercase.",
+            "example": "user@example.com"
           },
           "name": {
             "type": "string",
-            "example": "Ana Novak",
+            "description": "Display name, 1 to 100 characters. Spaces at the start and end are removed, only spaces is not allowed.",
+            "example": "Test User",
             "maxLength": 100,
             "minLength": 1
           },
           "password": {
             "type": "string",
+            "description": "Password, 6 to 128 characters. Only a hash is saved.",
             "example": "secret123",
             "maxLength": 128,
             "minLength": 6
@@ -995,19 +1769,21 @@
       },
       "UpdateRoleRequest": {
         "type": "object",
+        "description": "Body for changing the role of a user.",
         "required": [
           "role"
         ],
         "properties": {
           "role": {
             "type": "string",
-            "description": "\"user\" or \"admin\"",
+            "description": "New role, `user` or `admin`.",
             "example": "admin"
           }
         }
       },
       "UpdateUserRequest": {
         "type": "object",
+        "description": "Body for changing name and email. Both fields are required.",
         "required": [
           "name",
           "email"
@@ -1016,11 +1792,13 @@
           "email": {
             "type": "string",
             "format": "email",
-            "example": "ana@example.com"
+            "description": "New email, must be valid and not used by another account. Saved in lowercase.",
+            "example": "user@example.com"
           },
           "name": {
             "type": "string",
-            "example": "Ana Novak",
+            "description": "New display name, 1 to 100 characters, not only spaces.",
+            "example": "Test User",
             "maxLength": 100,
             "minLength": 1
           }
@@ -1028,6 +1806,7 @@
       },
       "UserPage": {
         "type": "object",
+        "description": "One page of users.",
         "required": [
           "items",
           "page",
@@ -1039,25 +1818,32 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/UserResponse"
-            }
+            },
+            "description": "Users on this page, sorted by id."
           },
           "page": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Page number that was returned.",
+            "example": 1
           },
           "pageSize": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Page size that was used.",
+            "example": 20
           },
           "total": {
             "type": "integer",
             "format": "int64",
-            "description": "Number of all users"
+            "description": "Number of all users on all pages.",
+            "example": 1
           }
         }
       },
       "UserResponse": {
         "type": "object",
+        "description": "A user account. The password hash is never returned.",
         "required": [
           "id",
           "name",
@@ -1068,20 +1854,30 @@
         "properties": {
           "createdAt": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "When the account was created (UTC).",
+            "example": "2026-11-20T10:15:00Z"
           },
           "email": {
-            "type": "string"
+            "type": "string",
+            "description": "Email in lowercase.",
+            "example": "user@example.com"
           },
           "id": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "description": "User id. Other services get it in the X-User-Id header.",
+            "example": 7
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "Display name.",
+            "example": "Test User"
           },
           "role": {
-            "type": "string"
+            "type": "string",
+            "description": "`user` or `admin`.",
+            "example": "user"
           }
         }
       }
@@ -1090,8 +1886,31 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "JWT"
+        "bearerFormat": "JWT",
+        "description": "Access token from POST /users/login or POST /users/refresh, valid ACCESS_TOKEN_MINUTES (default 15)."
       }
     }
-  }
+  },
+  "tags": [
+    {
+      "name": "auth",
+      "description": "Register, login, refresh, logout and the token check for Traefik"
+    },
+    {
+      "name": "me",
+      "description": "The logged in user"
+    },
+    {
+      "name": "users",
+      "description": "Read, change and delete one user"
+    },
+    {
+      "name": "admin",
+      "description": "Only for admins"
+    },
+    {
+      "name": "health",
+      "description": "Service status"
+    }
+  ]
 }

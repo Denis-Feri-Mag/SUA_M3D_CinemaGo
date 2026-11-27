@@ -6,7 +6,11 @@ use crate::models::responses::HealthResponse;
     get,
     path = "/health",
     tag = "health",
-    responses((status = 200, description = "Service is running", body = HealthResponse))
+    summary = "Health check",
+    description = "Returns `{\"status\":\"ok\"}` when the service is running. No token needed. Docker and Traefik use it to know when the service is ready.",
+    responses(
+        (status = 200, description = "Service is running", body = HealthResponse, example = json!({ "status": "ok" }))
+    )
 )]
 pub async fn health() -> Json<HealthResponse> {
     Json(HealthResponse {
