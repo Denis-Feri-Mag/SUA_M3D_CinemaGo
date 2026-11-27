@@ -1,4 +1,4 @@
-pub mod reservation_queries;
+pub mod reservation_repository;
 
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;

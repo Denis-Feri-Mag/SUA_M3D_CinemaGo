@@ -3,6 +3,10 @@ use sqlx::FromRow;
 
 use crate::models::responses::{ReservationResponse, SeatResponse};
 
+// Values of reservations.status ("paid" comes with the payments service)
+pub const STATUS_PENDING: &str = "pending";
+pub const STATUS_CANCELLED: &str = "cancelled";
+
 // One row in the reservations table
 #[derive(FromRow)]
 pub struct ReservationRow {

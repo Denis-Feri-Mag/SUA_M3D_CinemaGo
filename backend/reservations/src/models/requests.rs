@@ -2,9 +2,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
-use validator::Validate;
-
-use crate::errors::ApiError;
+use validator::{Validate, ValidationError};
 
 // The validate rules are checked in the handlers with request.validate(),
 // the schema rules only show the same limits in Swagger
@@ -31,7 +29,10 @@ pub struct CreateReservationRequest {
     #[schema(minimum = 1, example = 3)]
     pub screening_id: i32,
     /// Seats to book, 1 to 10 different seats.
-    #[validate(length(min = 1, max = 10, message = "must have 1 to 10 seats"))]
+    #[validate(
+        length(min = 1, max = 10, message = "must have 1 to 10 seats"),
+        custom(function = "check_seats")
+    )]
     #[schema(min_items = 1, max_items = 10)]
     pub seats: Vec<SeatRequest>,
 }
@@ -42,27 +43,31 @@ pub struct CreateReservationRequest {
 #[schema(example = json!({ "seats": [{ "row": 6, "number": 7 }, { "row": 6, "number": 8 }] }))]
 pub struct UpdateReservationRequest {
     /// New seats, 1 to 10 different seats on the same screening.
-    #[validate(length(min = 1, max = 10, message = "must have 1 to 10 seats"))]
+    #[validate(
+        length(min = 1, max = 10, message = "must have 1 to 10 seats"),
+        custom(function = "check_seats")
+    )]
     #[schema(min_items = 1, max_items = 10)]
     pub seats: Vec<SeatRequest>,
 }
 
-// Row and number must be 1 to 50 and the same seat cannot be in the list twice
-pub fn check_seats(seats: &[SeatRequest]) -> Result<(), ApiError> {
+// Custom validator rule for the seats list:
+// row and number must be 1 to 50 and the same seat cannot be in the list twice
+fn check_seats(seats: &[SeatRequest]) -> Result<(), ValidationError> {
     let mut seen_seats = HashSet::new();
     for seat in seats {
         if !(1..=50).contains(&seat.row) || !(1..=50).contains(&seat.number) {
-            return Err(ApiError::bad_request(
-                "seats: row and number must be 1 to 50",
-            ));
+            return Err(seat_error("row and number must be 1 to 50"));
         }
         if !seen_seats.insert((seat.row, seat.number)) {
-            return Err(ApiError::bad_request(
-                "seats: the same seat is listed twice",
-            ));
+            return Err(seat_error("the same seat is listed twice"));
         }
     }
     Ok(())
+}
+
+fn seat_error(message: &'static str) -> ValidationError {
+    ValidationError::new("seats").with_message(message.into())
 }
 
 // Only for Swagger: Traefik sets these headers after the token check,

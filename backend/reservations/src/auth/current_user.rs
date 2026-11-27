@@ -1,6 +1,10 @@
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
 use axum::http::HeaderMap;
 
 use crate::errors::ApiError;
+
+pub const ADMIN_ROLE: &str = "admin";
 
 // Traefik checks the token with the users service and then sends
 // X-User-Id and X-User-Role to this service, so we only read the headers
@@ -11,7 +15,7 @@ pub struct CurrentUser {
 
 impl CurrentUser {
     pub fn is_admin(&self) -> bool {
-        self.role == "admin"
+        self.role == ADMIN_ROLE
     }
 }
 
@@ -33,12 +37,13 @@ pub fn from_headers(headers: &HeaderMap) -> Result<CurrentUser, ApiError> {
     })
 }
 
-// The owner of the reservation or an admin
-pub fn check_owner_or_admin(user: &CurrentUser, owner_id: i32) -> Result<(), ApiError> {
-    if user.id == owner_id || user.is_admin() {
-        Ok(())
-    } else {
-        Err(ApiError::forbidden())
+// Lets a controller take `current_user: CurrentUser` as an argument,
+// a missing or bad header becomes 401 before the controller runs
+impl<S: Send + Sync> FromRequestParts<S> for CurrentUser {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        from_headers(&parts.headers)
     }
 }
 
@@ -58,21 +63,12 @@ mod tests {
         let user = from_headers(&headers("7", "user")).unwrap();
         assert_eq!(user.id, 7);
         assert!(!user.is_admin());
+        assert!(from_headers(&headers("1", "admin")).unwrap().is_admin());
     }
 
     #[test]
     fn rejects_missing_or_bad_headers() {
         assert!(from_headers(&HeaderMap::new()).is_err());
         assert!(from_headers(&headers("abc", "user")).is_err());
-    }
-
-    #[test]
-    fn owner_and_admin_are_allowed() {
-        let owner = from_headers(&headers("7", "user")).unwrap();
-        let other_user = from_headers(&headers("8", "user")).unwrap();
-        let admin = from_headers(&headers("1", "admin")).unwrap();
-        assert!(check_owner_or_admin(&owner, 7).is_ok());
-        assert!(check_owner_or_admin(&other_user, 7).is_err());
-        assert!(check_owner_or_admin(&admin, 7).is_ok());
     }
 }

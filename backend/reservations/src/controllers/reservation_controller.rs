@@ -1,21 +1,20 @@
+// Controllers only read the request (path, query, body, logged in user),
+// call the service and turn the result into an HTTP response.
+
 use axum::extract::rejection::QueryRejection;
 use axum::extract::{Query, State};
-use axum::http::{HeaderMap, StatusCode};
-use validator::Validate;
+use axum::http::StatusCode;
 
-use crate::auth::current_user::{self, CurrentUser};
-use crate::clients::screenings;
-use crate::db::reservation_queries;
+use crate::auth::current_user::CurrentUser;
 use crate::errors::ApiError;
 use crate::extractors::{Json, Path};
 use crate::models::requests::{
-    check_seats, CreateReservationRequest, ReservationListQuery, UpdateReservationRequest,
-    UserHeaders,
+    CreateReservationRequest, ReservationListQuery, UpdateReservationRequest, UserHeaders,
 };
-use crate::models::reservation::ReservationRow;
 use crate::models::responses::{
     ErrorResponse, ReservationPage, ReservationResponse, TakenSeatsResponse,
 };
+use crate::services::reservation_service;
 use crate::state::AppState;
 
 #[utoipa::path(
@@ -43,47 +42,19 @@ Cancelled and paid reservations are included, check `status`.",
 )]
 pub async fn get_reservations(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    current_user: CurrentUser,
     query: Result<Query<ReservationListQuery>, QueryRejection>,
 ) -> Result<Json<ReservationPage>, ApiError> {
-    let user = current_user::from_headers(&headers)?;
     let Query(list_query) = query?;
-
-    let page = list_query.page.unwrap_or(1);
-    let page_size = list_query.page_size.unwrap_or(20);
-    if page < 1 || !(1..=100).contains(&page_size) {
-        return Err(ApiError::bad_request(
-            "page must be at least 1 and pageSize 1 to 100",
-        ));
-    }
-
-    // Normal users only see their own reservations
-    let user_filter = if user.is_admin() {
-        list_query.user_id
-    } else {
-        match list_query.user_id {
-            Some(other_user_id) if other_user_id != user.id => return Err(ApiError::forbidden()),
-            _ => Some(user.id),
-        }
-    };
-
-    let offset = (page - 1) * page_size;
-    let reservations =
-        reservation_queries::get_reservations_page(&state.pool, user_filter, page_size, offset)
-            .await?;
-    let total = reservation_queries::count_reservations(&state.pool, user_filter).await?;
-
-    let mut items = Vec::new();
-    for reservation in reservations {
-        let seats = reservation_queries::get_seats(&state.pool, reservation.id).await?;
-        items.push(reservation.to_response(seats));
-    }
-    Ok(Json(ReservationPage {
-        items,
-        page,
-        page_size,
-        total,
-    }))
+    let page = reservation_service::list_reservations(
+        &state,
+        &current_user,
+        list_query.page,
+        list_query.page_size,
+        list_query.user_id,
+    )
+    .await?;
+    Ok(Json(page))
 }
 
 #[utoipa::path(
@@ -106,13 +77,12 @@ pub async fn get_reservations(
 )]
 pub async fn get_reservation(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    current_user: CurrentUser,
     Path(reservation_id): Path<i32>,
 ) -> Result<Json<ReservationResponse>, ApiError> {
-    let user = current_user::from_headers(&headers)?;
-    let reservation = find_own_reservation(&state, &user, reservation_id).await?;
-    let seats = reservation_queries::get_seats(&state.pool, reservation.id).await?;
-    Ok(Json(reservation.to_response(seats)))
+    let reservation =
+        reservation_service::get_reservation(&state, &current_user, reservation_id).await?;
+    Ok(Json(reservation))
 }
 
 #[utoipa::path(
@@ -135,11 +105,8 @@ pub async fn get_taken_seats(
     State(state): State<AppState>,
     Path(screening_id): Path<i32>,
 ) -> Result<Json<TakenSeatsResponse>, ApiError> {
-    let seats = reservation_queries::get_taken_seats(&state.pool, screening_id).await?;
-    Ok(Json(TakenSeatsResponse {
-        screening_id,
-        seats,
-    }))
+    let taken_seats = reservation_service::get_taken_seats(&state, screening_id).await?;
+    Ok(Json(taken_seats))
 }
 
 #[utoipa::path(
@@ -179,24 +146,12 @@ pub async fn get_taken_seats(
 )]
 pub async fn create_reservation(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    current_user: CurrentUser,
     Json(request): Json<CreateReservationRequest>,
 ) -> Result<(StatusCode, Json<ReservationResponse>), ApiError> {
-    let user = current_user::from_headers(&headers)?;
-    request.validate()?;
-    check_seats(&request.seats)?;
-
-    screenings::check_screening_exists(&state, request.screening_id).await?;
-
-    let reservation = reservation_queries::create_reservation(
-        &state.pool,
-        user.id,
-        request.screening_id,
-        &request.seats,
-    )
-    .await?;
-    let seats = reservation_queries::get_seats(&state.pool, reservation.id).await?;
-    Ok((StatusCode::CREATED, Json(reservation.to_response(seats))))
+    let reservation =
+        reservation_service::create_reservation(&state, &current_user, request).await?;
+    Ok((StatusCode::CREATED, Json(reservation)))
 }
 
 #[utoipa::path(
@@ -241,21 +196,13 @@ pub async fn create_reservation(
 )]
 pub async fn update_reservation(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    current_user: CurrentUser,
     Path(reservation_id): Path<i32>,
     Json(request): Json<UpdateReservationRequest>,
 ) -> Result<Json<ReservationResponse>, ApiError> {
-    let user = current_user::from_headers(&headers)?;
-    request.validate()?;
-    check_seats(&request.seats)?;
-
-    let reservation = find_own_reservation(&state, &user, reservation_id).await?;
-    check_pending(&reservation)?;
-
-    let updated_reservation =
-        reservation_queries::replace_seats(&state.pool, &reservation, &request.seats).await?;
-    let seats = reservation_queries::get_seats(&state.pool, reservation.id).await?;
-    Ok(Json(updated_reservation.to_response(seats)))
+    let reservation =
+        reservation_service::change_seats(&state, &current_user, reservation_id, request).await?;
+    Ok(Json(reservation))
 }
 
 #[utoipa::path(
@@ -281,16 +228,10 @@ Pending and paid reservations can be cancelled (refunds for paid ones come with 
 )]
 pub async fn cancel_reservation(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    current_user: CurrentUser,
     Path(reservation_id): Path<i32>,
 ) -> Result<StatusCode, ApiError> {
-    let user = current_user::from_headers(&headers)?;
-    let reservation = find_own_reservation(&state, &user, reservation_id).await?;
-    if reservation.status == "cancelled" {
-        return Err(ApiError::conflict("reservation is already cancelled"));
-    }
-
-    reservation_queries::cancel_reservation(&state.pool, reservation.id).await?;
+    reservation_service::cancel_reservation(&state, &current_user, reservation_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -328,46 +269,9 @@ pub async fn cancel_reservation(
 )]
 pub async fn delete_seat(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    current_user: CurrentUser,
     Path((reservation_id, seat_id)): Path<(i32, i32)>,
 ) -> Result<StatusCode, ApiError> {
-    let user = current_user::from_headers(&headers)?;
-    let reservation = find_own_reservation(&state, &user, reservation_id).await?;
-    check_pending(&reservation)?;
-
-    let seats = reservation_queries::get_seats(&state.pool, reservation.id).await?;
-    if !seats.iter().any(|seat| seat.id == seat_id) {
-        return Err(ApiError::new(StatusCode::NOT_FOUND, "seat not found"));
-    }
-    if seats.len() == 1 {
-        return Err(ApiError::conflict(
-            "cannot remove the last seat, cancel the reservation instead",
-        ));
-    }
-
-    reservation_queries::delete_seat(&state.pool, reservation.id, seat_id).await?;
+    reservation_service::remove_seat(&state, &current_user, reservation_id, seat_id).await?;
     Ok(StatusCode::NO_CONTENT)
-}
-
-// Loads the reservation and checks that the user may see or change it
-async fn find_own_reservation(
-    state: &AppState,
-    user: &CurrentUser,
-    reservation_id: i32,
-) -> Result<ReservationRow, ApiError> {
-    let reservation = reservation_queries::get_reservation(&state.pool, reservation_id)
-        .await?
-        .ok_or(ApiError::not_found())?;
-    current_user::check_owner_or_admin(user, reservation.user_id)?;
-    Ok(reservation)
-}
-
-// Seats can only change before the reservation is paid or cancelled
-fn check_pending(reservation: &ReservationRow) -> Result<(), ApiError> {
-    if reservation.status != "pending" {
-        return Err(ApiError::conflict(
-            "only pending reservations can be changed",
-        ));
-    }
-    Ok(())
 }
