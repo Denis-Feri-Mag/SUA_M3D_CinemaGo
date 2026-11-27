@@ -27,14 +27,18 @@ The tables are created on startup.
 
 ## Code layout
 
-- `src/main.rs` starts the service, `src/config.rs` reads env variables, `src/state.rs` shared state
-- `src/routes.rs` router, `src/openapi.rs` Swagger spec
-- `src/handlers/` endpoint handlers (auth, users, health)
-- `src/models/` database struct, requests (with validation rules) and responses
-- `src/db/` connection pool, table creation, SQL queries and the admin seed
-- `src/auth/` passwords, JWT, refresh tokens and the logged in user check
+The code is split in layers, a bit like NestJS: controller -> service -> repository.
+
+- `src/controllers/` read the request (path, query, body, logged in user), call the service and return the HTTP status and JSON. The Swagger docs are on these functions.
+- `src/services/auth_service.rs` register, login, refresh, logout, password change and the token check (token version)
+- `src/services/user_service.rs` user rules: who can change an account, roles, the last admin protection, page limits, cache clearing and the admin seed
+- `src/db/` data layer: connection pool, table creation and the SQL queries (`user_repository.rs`, `refresh_token_repository.rs`), no rules here
+- `src/models/` database struct and role values, requests (with validation rules) and responses
+- `src/auth/` passwords, JWT, refresh tokens and reading the bearer token of the logged in user
 - `src/cache/` Valkey cache for users
 - `src/clients/` calls to other services (notifications)
+- `src/main.rs` starts the service, `src/config.rs` reads env variables, `src/state.rs` shared state
+- `src/routes.rs` router, `src/openapi.rs` Swagger spec
 - `src/errors.rs` JSON errors, `src/extractors.rs` JSON errors for bad bodies and paths
 - `src/rate_limit.rs` rate limit for register, login and refresh
 - `src/endpoint_tests.rs` endpoint tests
@@ -126,7 +130,7 @@ If notifications is not running, it only logs a warning and register still works
 cargo test
 ```
 
-Unit tests cover passwords, JWT and refresh tokens. Endpoint tests in `src/endpoint_tests.rs` call the router directly and do not need a database.
+Unit tests cover passwords, JWT, refresh tokens and the account rules in the user service. Endpoint tests in `src/endpoint_tests.rs` call the router directly and do not need a database.
 One test needs the dev database (start it with the dev menu first):
 
 ```powershell
