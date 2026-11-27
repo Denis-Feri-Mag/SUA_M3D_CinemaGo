@@ -20,7 +20,6 @@ Tickets and PRs use the same plain style:
 - Every service has its own database, never read another service's database
 - Database name and user are `m3d_<service>`, like `m3d_movies`. Only the password goes in `.env`
 - Other services' URLs come from env variables, nothing hardcoded
-- Root `.env` is for compose, `backend/<service>/.env` is for running that service locally. Keep both `.env.example` files up to date
 - Every service has `GET /health` that returns 200
 - Swagger UI on `/docs`, spec on `/openapi.json`
 
@@ -46,6 +45,18 @@ pub struct ChangePasswordRequest {
     pub new_password: String,
 }
 ```
+
+## Environment
+
+- Names are UPPER_SNAKE_CASE
+- Root `.env` is for compose: one `<SERVICE>_DB_PASSWORD` per service (like `MOVIES_DB_PASSWORD`) and the users settings (`JWT_SECRET`, `ADMIN_EMAIL`, ...)
+- `backend/<service>/.env` is for running that service locally. Every service reads `PORT` and `DB_URL`
+- Other services are `<SERVICE>_URL` without a trailing slash, like `SCREENINGS_URL`. In Docker it is `http://screenings:8080` (default in `docker-compose.yml`), from a local run `http://localhost:8083`, see the table in "Running locally"
+- The DB password in your local `DB_URL` must match `<SERVICE>_DB_PASSWORD` in the root `.env`
+- A new variable goes into the right `.env.example` (and `docker-compose.yml` if Docker needs it) in the same PR, with a placeholder value and a short comment
+- `.env.example` only has placeholders like `changeme`. Never commit `.env`, it is in `.gitignore`
+- `dev.ps1` / `dev.sh` copy the root `.env.example` to `.env` if it is missing. For services you pick to run locally they set `<SERVICE>_URL` to `http://host.docker.internal:<dev port>` and `LOCAL_SERVICES` for that start only, you don't put these in `.env`
+- Rust services also read `backend/<service>/.env` on start (`dotenvy`), variables that are already set win
 
 ## Running
 
