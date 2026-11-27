@@ -7,6 +7,7 @@ use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
+use tokio::sync::OnceCell;
 use tower::ServiceExt;
 
 use crate::routes::create_router;
@@ -19,6 +20,15 @@ fn test_state(database_url: &str) -> AppState {
         screenings_url: "http://127.0.0.1:1".to_string(),
         http_client: reqwest::Client::new(),
     }
+}
+
+// The database tests run at the same time, two CREATE TABLE on an empty database can clash
+static TABLES_CREATED: OnceCell<()> = OnceCell::const_new();
+
+async fn create_tables_once(state: &AppState) {
+    TABLES_CREATED
+        .get_or_init(|| crate::db::create_tables(&state.pool))
+        .await;
 }
 
 fn app_without_database() -> axum::Router {
@@ -202,7 +212,7 @@ async fn unknown_path_returns_404_json() {
 async fn reservation_flow_with_database() {
     let database_url = std::env::var("TEST_DB_URL").expect("TEST_DB_URL is not set");
     let state = test_state(&database_url);
-    crate::db::create_tables(&state.pool).await;
+    create_tables_once(&state).await;
     let app = create_router(state);
 
     // Random screening id so the test can run more than once
@@ -318,7 +328,7 @@ async fn reservation_flow_with_database() {
 async fn removing_both_seats_at_once_keeps_one_with_database() {
     let database_url = std::env::var("TEST_DB_URL").expect("TEST_DB_URL is not set");
     let state = test_state(&database_url);
-    crate::db::create_tables(&state.pool).await;
+    create_tables_once(&state).await;
     let app = create_router(state);
 
     let first_screening_id = (chrono::Utc::now().timestamp_micros() % 1_000_000_000) as i32 + 2000;
