@@ -2,20 +2,17 @@
   "openapi": "3.1.0",
   "info": {
     "title": "CinemaGo reservations service",
-    "description": "",
-    "license": {
-      "name": ""
-    },
+    "description": "Reservations service of CinemaGo. Users book seats for a screening, change or remove seats while the reservation is pending, and cancel it.\n\n## How to call it\n\n- **Through the Traefik gateway** (server `/api`, for example `http://localhost:8080/api/reservations`): log in with `POST /api/users/login`, then send `Authorization: Bearer <token>` (use the Authorize button). Traefik checks the token with the users service and passes `X-User-Id` and `X-User-Role` on to this service. Headers with those names sent by the client are replaced by Traefik.\n- **Directly** (server `/`, dev port 8084): there is no token check, set `X-User-Id` and `X-User-Role` yourself.\n\nWithout a logged in user the service answers 401. Users can only see and change their own reservations (403 otherwise), admins can see and change all of them.\n\nPublic without a token: `GET /health`, `GET /reservations/screenings/{screeningId}/seats`, `/docs` and `/openapi.json`.\n\n## Reservation status\n\n`pending` after booking, `paid` after payment (payments service, later), `cancelled` after cancel. Seats can only be changed while the reservation is `pending`.\n\n## Seats\n\nA seat is a row and a seat number, both 1 to 50. One reservation has 1 to 10 seats. A seat can only be taken once per screening, cancelled reservations and removed seats free their seats again.\n\n## Errors\n\nEvery error from this service is JSON like `{\"error\": \"reservation not found\"}`. This includes bad JSON bodies (400, 415, 422), bad path or query values (400) and unknown paths (404). When the service is down, the gateway itself answers 502 or 503 without a JSON body.",
     "version": "1.0.0"
   },
   "servers": [
     {
       "url": "/",
-      "description": "Direct to the reservations service"
+      "description": "Direct to the reservations service (dev port 8084), set X-User-Id and X-User-Role yourself"
     },
     {
       "url": "/api",
-      "description": "Through the Traefik gateway"
+      "description": "Through the Traefik gateway (port 8080), use a bearer token"
     }
   ],
   "paths": {
@@ -24,6 +21,8 @@
         "tags": [
           "health"
         ],
+        "summary": "Health check",
+        "description": "Returns `{\"status\":\"ok\"}` when the service is running. No token needed. Docker and Traefik use it to know when the service is ready.",
         "operationId": "health",
         "responses": {
           "200": {
@@ -32,6 +31,9 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HealthResponse"
+                },
+                "example": {
+                  "status": "ok"
                 }
               }
             }
@@ -44,12 +46,14 @@
         "tags": [
           "reservations"
         ],
+        "summary": "List reservations",
+        "description": "Returns one page of reservations with their seats, sorted by id.\n\n**Who can call it:** any logged in user.\n\n- A normal user only sees their own reservations. `userId` can be left out or set to their own id, any other id returns 403.\n- An admin sees the reservations of all users, or of one user with `?userId=`.\n\nCancelled and paid reservations are included, check `status`.",
         "operationId": "get_reservations",
         "parameters": [
           {
             "name": "X-User-Id",
             "in": "header",
-            "description": "Id of the logged in user",
+            "description": "Id of the logged in user. Set by Traefik from the token, only send it yourself when calling the service directly.",
             "required": false,
             "schema": {
               "type": [
@@ -57,57 +61,62 @@
                 "null"
               ],
               "format": "int32"
-            }
+            },
+            "example": 7
           },
           {
             "name": "X-User-Role",
             "in": "header",
-            "description": "user or admin",
+            "description": "Role of the logged in user, `user` or `admin`. Set by Traefik like X-User-Id.",
             "required": false,
             "schema": {
               "type": [
                 "string",
                 "null"
               ]
-            }
+            },
+            "example": "user"
           },
           {
             "name": "page",
             "in": "query",
-            "description": "Page number, starts at 1 (default 1)",
+            "description": "Page number, starts at 1. Default 1.",
             "required": false,
             "schema": {
               "type": "integer",
               "format": "int64",
               "minimum": 1
-            }
+            },
+            "example": 1
           },
           {
             "name": "pageSize",
             "in": "query",
-            "description": "Reservations per page, 1 to 100 (default 20)",
+            "description": "Reservations per page, 1 to 100. Default 20.",
             "required": false,
             "schema": {
               "type": "integer",
               "format": "int64",
               "maximum": 100,
               "minimum": 1
-            }
+            },
+            "example": 20
           },
           {
             "name": "userId",
             "in": "query",
-            "description": "Only for admins: reservations of one user",
+            "description": "Only reservations of this user. Admins can use any id, a normal user only their own id (other ids give 403).",
             "required": false,
             "schema": {
               "type": "integer",
               "format": "int32"
-            }
+            },
+            "example": 7
           }
         ],
         "responses": {
           "200": {
-            "description": "Your reservations, admins see all",
+            "description": "One page of reservations.",
             "content": {
               "application/json": {
                 "schema": {
@@ -117,31 +126,64 @@
             }
           },
           "400": {
-            "description": "Bad page or pageSize",
+            "description": "`page` or `pageSize` is out of range or not a number.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "Not a number": {
+                    "summary": "page is not a number",
+                    "value": {
+                      "error": "Failed to deserialize query string: page: invalid digit found in string"
+                    }
+                  },
+                  "Out of range": {
+                    "summary": "page below 1 or pageSize not 1 to 100",
+                    "value": {
+                      "error": "page must be at least 1 and pageSize 1 to 100"
+                    }
+                  }
                 }
               }
             }
           },
           "401": {
-            "description": "Not logged in",
+            "description": "No logged in user: the X-User-Id or X-User-Role header is missing or invalid. Through the gateway this means the bearer token is missing, expired or invalid (that 401 comes from the users service).",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "missing or invalid user"
                 }
               }
             }
           },
           "403": {
-            "description": "userId of someone else (only admins)",
+            "description": "A normal user asked for the reservations of another user with `userId`.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "not allowed"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -157,12 +199,14 @@
         "tags": [
           "reservations"
         ],
+        "summary": "Book seats",
+        "description": "Creates a reservation for the logged in user with status `pending`.\n\n**Who can call it:** any logged in user. The reservation always belongs to the caller.\n\n**Rules:**\n- 1 to 10 seats, row and number 1 to 50, the same seat only once in the list.\n- The service asks the screenings service (`GET /screenings/{id}`) if the screening exists. If screenings answers 404, the booking fails with 404. If screenings is not reachable, the check is skipped and the booking still works.\n- All seats are saved together. If one seat is already taken by a pending or paid reservation, nothing is saved and the answer is 409.",
         "operationId": "create_reservation",
         "parameters": [
           {
             "name": "X-User-Id",
             "in": "header",
-            "description": "Id of the logged in user",
+            "description": "Id of the logged in user. Set by Traefik from the token, only send it yourself when calling the service directly.",
             "required": false,
             "schema": {
               "type": [
@@ -170,22 +214,25 @@
                 "null"
               ],
               "format": "int32"
-            }
+            },
+            "example": 7
           },
           {
             "name": "X-User-Role",
             "in": "header",
-            "description": "user or admin",
+            "description": "Role of the logged in user, `user` or `admin`. Set by Traefik like X-User-Id.",
             "required": false,
             "schema": {
               "type": [
                 "string",
                 "null"
               ]
-            }
+            },
+            "example": "user"
           }
         ],
         "requestBody": {
+          "description": "Screening and the seats to book.",
           "content": {
             "application/json": {
               "schema": {
@@ -197,51 +244,151 @@
         },
         "responses": {
           "201": {
-            "description": "Reservation created as pending",
+            "description": "Reservation created with status pending.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReservationResponse"
+                },
+                "example": {
+                  "createdAt": "2026-12-01T18:30:00Z",
+                  "id": 12,
+                  "screeningId": 3,
+                  "seats": [
+                    {
+                      "id": 31,
+                      "number": 12,
+                      "row": 5
+                    },
+                    {
+                      "id": 32,
+                      "number": 13,
+                      "row": 5
+                    }
+                  ],
+                  "status": "pending",
+                  "updatedAt": "2026-12-01T18:30:00Z",
+                  "userId": 7
                 }
               }
             }
           },
           "400": {
-            "description": "Bad screening id or seats",
+            "description": "The body breaks one of the rules.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "Bad JSON": {
+                    "summary": "The body is not valid JSON",
+                    "value": {
+                      "error": "Failed to parse the request body as JSON: key must be a string at line 1 column 2"
+                    }
+                  },
+                  "Bad screening id": {
+                    "summary": "screeningId is below 1",
+                    "value": {
+                      "error": "screeningId: must be at least 1"
+                    }
+                  },
+                  "Missing seats": {
+                    "summary": "Empty seat list or more than 10 seats",
+                    "value": {
+                      "error": "seats: must have 1 to 10 seats"
+                    }
+                  },
+                  "Same seat twice": {
+                    "summary": "A seat is listed more than once",
+                    "value": {
+                      "error": "seats: the same seat is listed twice"
+                    }
+                  },
+                  "Seat out of range": {
+                    "summary": "Row or number is not 1 to 50",
+                    "value": {
+                      "error": "seats: row and number must be 1 to 50"
+                    }
+                  }
                 }
               }
             }
           },
           "401": {
-            "description": "Not logged in",
+            "description": "No logged in user: the X-User-Id or X-User-Role header is missing or invalid. Through the gateway this means the bearer token is missing, expired or invalid (that 401 comes from the users service).",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "missing or invalid user"
                 }
               }
             }
           },
           "404": {
-            "description": "Screening not found",
+            "description": "The screenings service says this screening does not exist.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "screening not found"
                 }
               }
             }
           },
           "409": {
-            "description": "A seat is already taken",
+            "description": "At least one seat is already taken on this screening.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "seat already taken"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not sent as JSON (missing `Content-Type: application/json`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Expected request with `Content-Type: application/json`"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The JSON is valid but a field is missing or has the wrong type.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Failed to deserialize the JSON body into the target type: missing field `seats` at line 1 column 17"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -259,36 +406,68 @@
         "tags": [
           "reservations"
         ],
+        "summary": "Taken seats of a screening",
+        "description": "Lists the seats of one screening that are already booked (pending or paid reservations). The frontend uses it to draw the seat map. Seats of cancelled reservations and removed seats are free again and not listed.\n\n**Who can call it:** everyone, no token needed. Through the gateway it is the only public reservations path besides health and docs.\n\nThe screening is not checked here, an unknown screening simply has no taken seats.",
         "operationId": "get_taken_seats",
         "parameters": [
           {
             "name": "screeningId",
             "in": "path",
-            "description": "Screening id",
+            "description": "Screening id from the screenings service",
             "required": true,
             "schema": {
               "type": "integer",
               "format": "int32"
-            }
+            },
+            "example": 3
           }
         ],
         "responses": {
           "200": {
-            "description": "Seats that are already taken, no token needed",
+            "description": "Taken seats, sorted by row and number.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TakenSeatsResponse"
+                },
+                "example": {
+                  "screeningId": 3,
+                  "seats": [
+                    {
+                      "number": 12,
+                      "row": 5
+                    },
+                    {
+                      "number": 13,
+                      "row": 5
+                    }
+                  ]
                 }
               }
             }
           },
           "400": {
-            "description": "Bad screening id",
+            "description": "The screening id in the path is not a whole number.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Invalid URL: Cannot parse `abc` to a `i32`"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -301,6 +480,8 @@
         "tags": [
           "reservations"
         ],
+        "summary": "Get one reservation",
+        "description": "Returns one reservation with all its seats and its status.\n\n**Who can call it:** the user who made the reservation, or an admin.",
         "operationId": "get_reservation",
         "parameters": [
           {
@@ -311,12 +492,13 @@
             "schema": {
               "type": "integer",
               "format": "int32"
-            }
+            },
+            "example": 12
           },
           {
             "name": "X-User-Id",
             "in": "header",
-            "description": "Id of the logged in user",
+            "description": "Id of the logged in user. Set by Traefik from the token, only send it yourself when calling the service directly.",
             "required": false,
             "schema": {
               "type": [
@@ -324,24 +506,26 @@
                 "null"
               ],
               "format": "int32"
-            }
+            },
+            "example": 7
           },
           {
             "name": "X-User-Role",
             "in": "header",
-            "description": "user or admin",
+            "description": "Role of the logged in user, `user` or `admin`. Set by Traefik like X-User-Id.",
             "required": false,
             "schema": {
               "type": [
                 "string",
                 "null"
               ]
-            }
+            },
+            "example": "user"
           }
         ],
         "responses": {
           "200": {
-            "description": "One reservation with its seats",
+            "description": "The reservation.",
             "content": {
               "application/json": {
                 "schema": {
@@ -350,32 +534,67 @@
               }
             }
           },
-          "401": {
-            "description": "Not logged in",
+          "400": {
+            "description": "The id in the path is not a whole number.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Invalid URL: Cannot parse `abc` to a `i32`"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No logged in user: the X-User-Id or X-User-Role header is missing or invalid. Through the gateway this means the bearer token is missing, expired or invalid (that 401 comes from the users service).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "missing or invalid user"
                 }
               }
             }
           },
           "403": {
-            "description": "Not your reservation",
+            "description": "The reservation belongs to another user and you are not an admin.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "not allowed"
                 }
               }
             }
           },
           "404": {
-            "description": "Reservation not found",
+            "description": "No reservation with this id.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "reservation not found"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -391,6 +610,8 @@
         "tags": [
           "reservations"
         ],
+        "summary": "Change the seats of a reservation",
+        "description": "Replaces all seats of a reservation with the seats in the body. The screening stays the same.\n\n**Who can call it:** the user who made the reservation, or an admin.\n\n**Rules:**\n- Only `pending` reservations can be changed, paid or cancelled ones return 409.\n- Same seat rules as booking: 1 to 10 seats, row and number 1 to 50, no seat twice.\n- Old seats are freed and new seats are taken in one step. Keeping some of the old seats in the list is fine. If a new seat is taken by someone else, nothing changes and the answer is 409.\n- Seats get new ids.",
         "operationId": "update_reservation",
         "parameters": [
           {
@@ -401,12 +622,13 @@
             "schema": {
               "type": "integer",
               "format": "int32"
-            }
+            },
+            "example": 12
           },
           {
             "name": "X-User-Id",
             "in": "header",
-            "description": "Id of the logged in user",
+            "description": "Id of the logged in user. Set by Traefik from the token, only send it yourself when calling the service directly.",
             "required": false,
             "schema": {
               "type": [
@@ -414,22 +636,25 @@
                 "null"
               ],
               "format": "int32"
-            }
+            },
+            "example": 7
           },
           {
             "name": "X-User-Role",
             "in": "header",
-            "description": "user or admin",
+            "description": "Role of the logged in user, `user` or `admin`. Set by Traefik like X-User-Id.",
             "required": false,
             "schema": {
               "type": [
                 "string",
                 "null"
               ]
-            }
+            },
+            "example": "user"
           }
         ],
         "requestBody": {
+          "description": "The new list of seats.",
           "content": {
             "application/json": {
               "schema": {
@@ -441,61 +666,175 @@
         },
         "responses": {
           "200": {
-            "description": "Seats changed",
+            "description": "Seats changed, returns the reservation with the new seats.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReservationResponse"
+                },
+                "example": {
+                  "createdAt": "2026-12-01T18:30:00Z",
+                  "id": 12,
+                  "screeningId": 3,
+                  "seats": [
+                    {
+                      "id": 35,
+                      "number": 7,
+                      "row": 6
+                    },
+                    {
+                      "id": 36,
+                      "number": 8,
+                      "row": 6
+                    }
+                  ],
+                  "status": "pending",
+                  "updatedAt": "2026-12-01T18:35:00Z",
+                  "userId": 7
                 }
               }
             }
           },
           "400": {
-            "description": "Bad seats",
+            "description": "Bad id in the path, or the body breaks one of the seat rules.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "Bad JSON": {
+                    "summary": "The body is not valid JSON",
+                    "value": {
+                      "error": "Failed to parse the request body as JSON: key must be a string at line 1 column 2"
+                    }
+                  },
+                  "Bad id": {
+                    "summary": "The id in the path is not a number",
+                    "value": {
+                      "error": "Invalid URL: Cannot parse `abc` to a `i32`"
+                    }
+                  },
+                  "Missing seats": {
+                    "summary": "Empty seat list or more than 10 seats",
+                    "value": {
+                      "error": "seats: must have 1 to 10 seats"
+                    }
+                  },
+                  "Same seat twice": {
+                    "summary": "A seat is listed more than once",
+                    "value": {
+                      "error": "seats: the same seat is listed twice"
+                    }
+                  },
+                  "Seat out of range": {
+                    "summary": "Row or number is not 1 to 50",
+                    "value": {
+                      "error": "seats: row and number must be 1 to 50"
+                    }
+                  }
                 }
               }
             }
           },
           "401": {
-            "description": "Not logged in",
+            "description": "No logged in user: the X-User-Id or X-User-Role header is missing or invalid. Through the gateway this means the bearer token is missing, expired or invalid (that 401 comes from the users service).",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "missing or invalid user"
                 }
               }
             }
           },
           "403": {
-            "description": "Not your reservation",
+            "description": "The reservation belongs to another user and you are not an admin.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "not allowed"
                 }
               }
             }
           },
           "404": {
-            "description": "Reservation not found",
+            "description": "No reservation with this id.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "reservation not found"
                 }
               }
             }
           },
           "409": {
-            "description": "Not pending anymore or a seat is already taken",
+            "description": "The reservation is not pending anymore, or a new seat is already taken.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "Not pending": {
+                    "summary": "Reservation is paid or cancelled",
+                    "value": {
+                      "error": "only pending reservations can be changed"
+                    }
+                  },
+                  "Seat taken": {
+                    "summary": "A new seat is booked by someone else",
+                    "value": {
+                      "error": "seat already taken"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not sent as JSON (missing `Content-Type: application/json`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Expected request with `Content-Type: application/json`"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The JSON is valid but a field is missing or has the wrong type.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Failed to deserialize the JSON body into the target type: missing field `seats` at line 1 column 17"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -511,6 +850,8 @@
         "tags": [
           "reservations"
         ],
+        "summary": "Cancel a reservation",
+        "description": "Sets the status to `cancelled` and frees all its seats, so others can book them. The reservation itself is kept and still shows up in the list with its old seats.\n\n**Who can call it:** the user who made the reservation, or an admin.\n\nPending and paid reservations can be cancelled (refunds for paid ones come with the payments service). Cancelling twice returns 409.",
         "operationId": "cancel_reservation",
         "parameters": [
           {
@@ -521,12 +862,13 @@
             "schema": {
               "type": "integer",
               "format": "int32"
-            }
+            },
+            "example": 12
           },
           {
             "name": "X-User-Id",
             "in": "header",
-            "description": "Id of the logged in user",
+            "description": "Id of the logged in user. Set by Traefik from the token, only send it yourself when calling the service directly.",
             "required": false,
             "schema": {
               "type": [
@@ -534,61 +876,101 @@
                 "null"
               ],
               "format": "int32"
-            }
+            },
+            "example": 7
           },
           {
             "name": "X-User-Role",
             "in": "header",
-            "description": "user or admin",
+            "description": "Role of the logged in user, `user` or `admin`. Set by Traefik like X-User-Id.",
             "required": false,
             "schema": {
               "type": [
                 "string",
                 "null"
               ]
-            }
+            },
+            "example": "user"
           }
         ],
         "responses": {
           "204": {
-            "description": "Reservation cancelled, its seats are free again"
+            "description": "Cancelled, the seats are free again. No body."
           },
-          "401": {
-            "description": "Not logged in",
+          "400": {
+            "description": "The id in the path is not a whole number.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Invalid URL: Cannot parse `abc` to a `i32`"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No logged in user: the X-User-Id or X-User-Role header is missing or invalid. Through the gateway this means the bearer token is missing, expired or invalid (that 401 comes from the users service).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "missing or invalid user"
                 }
               }
             }
           },
           "403": {
-            "description": "Not your reservation",
+            "description": "The reservation belongs to another user and you are not an admin.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "not allowed"
                 }
               }
             }
           },
           "404": {
-            "description": "Reservation not found",
+            "description": "No reservation with this id.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "reservation not found"
                 }
               }
             }
           },
           "409": {
-            "description": "Already cancelled",
+            "description": "The reservation is already cancelled.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "reservation is already cancelled"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -606,6 +988,8 @@
         "tags": [
           "reservations"
         ],
+        "summary": "Remove one seat from a reservation",
+        "description": "Deletes one seat from a reservation, the seat is free again right away. The seat id is the `id` in the `seats` list of the reservation.\n\n**Who can call it:** the user who made the reservation, or an admin.\n\n**Rules:**\n- Only `pending` reservations can be changed.\n- The last seat cannot be removed, cancel the reservation instead.",
         "operationId": "delete_seat",
         "parameters": [
           {
@@ -616,22 +1000,24 @@
             "schema": {
               "type": "integer",
               "format": "int32"
-            }
+            },
+            "example": 12
           },
           {
             "name": "seatId",
             "in": "path",
-            "description": "Seat id from the reservation",
+            "description": "Seat id from the seats list of this reservation",
             "required": true,
             "schema": {
               "type": "integer",
               "format": "int32"
-            }
+            },
+            "example": 32
           },
           {
             "name": "X-User-Id",
             "in": "header",
-            "description": "Id of the logged in user",
+            "description": "Id of the logged in user. Set by Traefik from the token, only send it yourself when calling the service directly.",
             "required": false,
             "schema": {
               "type": [
@@ -639,61 +1025,123 @@
                 "null"
               ],
               "format": "int32"
-            }
+            },
+            "example": 7
           },
           {
             "name": "X-User-Role",
             "in": "header",
-            "description": "user or admin",
+            "description": "Role of the logged in user, `user` or `admin`. Set by Traefik like X-User-Id.",
             "required": false,
             "schema": {
               "type": [
                 "string",
                 "null"
               ]
-            }
+            },
+            "example": "user"
           }
         ],
         "responses": {
           "204": {
-            "description": "Seat removed from the reservation"
+            "description": "Seat removed. No body."
           },
-          "401": {
-            "description": "Not logged in",
+          "400": {
+            "description": "An id in the path is not a whole number.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Invalid URL: Cannot parse `abc` to a `i32`"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No logged in user: the X-User-Id or X-User-Role header is missing or invalid. Through the gateway this means the bearer token is missing, expired or invalid (that 401 comes from the users service).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "missing or invalid user"
                 }
               }
             }
           },
           "403": {
-            "description": "Not your reservation",
+            "description": "The reservation belongs to another user and you are not an admin.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "not allowed"
                 }
               }
             }
           },
           "404": {
-            "description": "Reservation or seat not found",
+            "description": "No reservation with this id, or the seat is not part of this reservation.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "Reservation": {
+                    "summary": "Unknown reservation",
+                    "value": {
+                      "error": "reservation not found"
+                    }
+                  },
+                  "Seat": {
+                    "summary": "Seat id is not in this reservation",
+                    "value": {
+                      "error": "seat not found"
+                    }
+                  }
                 }
               }
             }
           },
           "409": {
-            "description": "Not pending anymore or the last seat",
+            "description": "The reservation is not pending anymore, or this is its last seat.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "Last seat": {
+                    "summary": "Only one seat left",
+                    "value": {
+                      "error": "cannot remove the last seat, cancel the reservation instead"
+                    }
+                  },
+                  "Not pending": {
+                    "summary": "Reservation is paid or cancelled",
+                    "value": {
+                      "error": "only pending reservations can be changed"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected database error. The details are only in the service log.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "database error"
                 }
               }
             }
@@ -711,6 +1159,7 @@
     "schemas": {
       "CreateReservationRequest": {
         "type": "object",
+        "description": "Body for booking seats. The same seat cannot be listed twice.",
         "required": [
           "screeningId",
           "seats"
@@ -719,6 +1168,7 @@
           "screeningId": {
             "type": "integer",
             "format": "int32",
+            "description": "Id of the screening from the screenings service, at least 1.",
             "example": 3,
             "minimum": 1
           },
@@ -727,35 +1177,56 @@
             "items": {
               "$ref": "#/components/schemas/SeatRequest"
             },
+            "description": "Seats to book, 1 to 10 different seats.",
             "maxItems": 10,
             "minItems": 1
           }
+        },
+        "example": {
+          "screeningId": 3,
+          "seats": [
+            {
+              "number": 12,
+              "row": 5
+            },
+            {
+              "number": 13,
+              "row": 5
+            }
+          ]
         }
       },
       "ErrorResponse": {
         "type": "object",
+        "description": "Every error in this service has this shape.",
         "required": [
           "error"
         ],
         "properties": {
           "error": {
-            "type": "string"
+            "type": "string",
+            "description": "Short message that says what went wrong.",
+            "example": "reservation not found"
           }
         }
       },
       "HealthResponse": {
         "type": "object",
+        "description": "Health check answer.",
         "required": [
           "status"
         ],
         "properties": {
           "status": {
-            "type": "string"
+            "type": "string",
+            "description": "Always `ok` when the service is running.",
+            "example": "ok"
           }
         }
       },
       "ReservationPage": {
         "type": "object",
+        "description": "One page of reservations.",
         "required": [
           "items",
           "page",
@@ -767,25 +1238,32 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ReservationResponse"
-            }
+            },
+            "description": "Reservations on this page, sorted by id."
           },
           "page": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Page number that was returned.",
+            "example": 1
           },
           "pageSize": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Page size that was used.",
+            "example": 20
           },
           "total": {
             "type": "integer",
             "format": "int64",
-            "description": "Number of all matching reservations"
+            "description": "Number of all matching reservations on all pages.",
+            "example": 1
           }
         }
       },
       "ReservationResponse": {
         "type": "object",
+        "description": "A reservation with its seats.",
         "required": [
           "id",
           "userId",
@@ -798,38 +1276,51 @@
         "properties": {
           "createdAt": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "When the reservation was made (UTC).",
+            "example": "2026-12-01T18:30:00Z"
           },
           "id": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "description": "Reservation id.",
+            "example": 12
           },
           "screeningId": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "description": "Id of the screening (from the screenings service).",
+            "example": 3
           },
           "seats": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SeatResponse"
-            }
+            },
+            "description": "Booked seats, sorted by row and number. Seats of a cancelled reservation are still listed but no longer taken."
           },
           "status": {
             "type": "string",
-            "description": "pending, paid or cancelled"
+            "description": "`pending` after booking, `paid` after payment, `cancelled` after cancel. Only pending reservations can be changed.",
+            "example": "pending"
           },
           "updatedAt": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Last change of status or seats (UTC).",
+            "example": "2026-12-01T18:35:00Z"
           },
           "userId": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "description": "Id of the user who made the reservation (from the users service).",
+            "example": 7
           }
         }
       },
       "SeatRequest": {
         "type": "object",
+        "description": "One seat in the hall, picked by row and seat number.",
         "required": [
           "row",
           "number"
@@ -838,6 +1329,7 @@
           "number": {
             "type": "integer",
             "format": "int32",
+            "description": "Seat number in the row, 1 to 50.",
             "example": 12,
             "maximum": 50,
             "minimum": 1
@@ -845,6 +1337,7 @@
           "row": {
             "type": "integer",
             "format": "int32",
+            "description": "Row number, counted from the screen, 1 to 50.",
             "example": 5,
             "maximum": 50,
             "minimum": 1
@@ -853,6 +1346,7 @@
       },
       "SeatResponse": {
         "type": "object",
+        "description": "A booked seat.",
         "required": [
           "id",
           "row",
@@ -861,20 +1355,27 @@
         "properties": {
           "id": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "description": "Seat id, used to remove one seat with DELETE /reservations/{id}/seats/{seatId}.",
+            "example": 31
           },
           "number": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "description": "Seat number in the row, 1 to 50.",
+            "example": 12
           },
           "row": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "description": "Row number, 1 to 50.",
+            "example": 5
           }
         }
       },
       "TakenSeat": {
         "type": "object",
+        "description": "A seat that is already booked by someone.",
         "required": [
           "row",
           "number"
@@ -882,16 +1383,21 @@
         "properties": {
           "number": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "description": "Seat number in the row.",
+            "example": 12
           },
           "row": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "description": "Row number.",
+            "example": 5
           }
         }
       },
       "TakenSeatsResponse": {
         "type": "object",
+        "description": "Taken seats of one screening. Seats of cancelled reservations are free and not listed.",
         "required": [
           "screeningId",
           "seats"
@@ -899,18 +1405,22 @@
         "properties": {
           "screeningId": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "description": "The screening id from the path.",
+            "example": 3
           },
           "seats": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/TakenSeat"
-            }
+            },
+            "description": "Taken seats, sorted by row and number. Empty when nothing is booked yet."
           }
         }
       },
       "UpdateReservationRequest": {
         "type": "object",
+        "description": "Body for changing seats. The new list replaces all old seats of the reservation.",
         "required": [
           "seats"
         ],
@@ -920,9 +1430,22 @@
             "items": {
               "$ref": "#/components/schemas/SeatRequest"
             },
+            "description": "New seats, 1 to 10 different seats on the same screening.",
             "maxItems": 10,
             "minItems": 1
           }
+        },
+        "example": {
+          "seats": [
+            {
+              "number": 7,
+              "row": 6
+            },
+            {
+              "number": 8,
+              "row": 6
+            }
+          ]
         }
       }
     },
@@ -930,8 +1453,19 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "JWT"
+        "bearerFormat": "JWT",
+        "description": "Access token from POST /api/users/login (valid 15 minutes). Only checked by Traefik, which then sets X-User-Id and X-User-Role."
       }
     }
-  }
+  },
+  "tags": [
+    {
+      "name": "reservations",
+      "description": "Book, list, change and cancel seat reservations"
+    },
+    {
+      "name": "health",
+      "description": "Service status"
+    }
+  ]
 }

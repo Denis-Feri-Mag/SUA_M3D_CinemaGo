@@ -79,6 +79,30 @@ async fn openapi_lists_all_paths() {
 }
 
 #[tokio::test]
+async fn every_endpoint_has_a_summary_and_errors() {
+    let request = Request::get("/openapi.json").body(Body::empty()).unwrap();
+    let (_, body) = send(app_without_database(), request).await;
+    for (path, operations) in body["paths"].as_object().unwrap() {
+        for (method, operation) in operations.as_object().unwrap() {
+            assert!(
+                operation["summary"].is_string(),
+                "{method} {path} has no summary"
+            );
+            assert!(
+                operation["description"].is_string(),
+                "{method} {path} has no description"
+            );
+            if path != "/health" {
+                assert!(
+                    operation["responses"]["500"].is_object(),
+                    "{method} {path} has no 500"
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
 async fn list_without_user_headers_returns_401() {
     let request = Request::get("/reservations").body(Body::empty()).unwrap();
     let (status, body) = send(app_without_database(), request).await;
