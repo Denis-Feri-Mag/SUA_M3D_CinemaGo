@@ -106,6 +106,30 @@ async fn openapi_lists_the_endpoints() {
     assert!(body["paths"]["/auth/verify"].is_object());
 }
 
+#[tokio::test]
+async fn every_endpoint_has_a_summary_and_errors() {
+    let request = Request::get("/openapi.json").body(Body::empty()).unwrap();
+    let (_, body) = send(app_without_database(), request).await;
+    for (path, operations) in body["paths"].as_object().unwrap() {
+        for (method, operation) in operations.as_object().unwrap() {
+            assert!(
+                operation["summary"].is_string(),
+                "{method} {path} has no summary"
+            );
+            assert!(
+                operation["description"].is_string(),
+                "{method} {path} has no description"
+            );
+            if path != "/health" {
+                assert!(
+                    operation["responses"]["500"].is_object(),
+                    "{method} {path} has no 500"
+                );
+            }
+        }
+    }
+}
+
 // Needs the dev database: TEST_DB_URL=postgres://m3d_users:changeme@localhost:5432/m3d_users cargo test -- --ignored
 #[tokio::test]
 #[ignore]
