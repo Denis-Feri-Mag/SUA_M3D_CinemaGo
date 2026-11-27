@@ -26,9 +26,26 @@ Tickets and PRs use the same plain style:
 
 ## API
 
-- JSON everywhere, names in camelCase
+- JSON everywhere. Names in camelCase in bodies, responses, query and path parameters (`pageSize`, `{screeningId}`), whatever the language
+- In the code and the database every language keeps its own style. Tables and columns are snake_case (`user_id`, `created_at`)
+- Rust: put `#[serde(rename_all = "camelCase")]` on every request, response and query struct. Other services: check that your framework also gives camelCase
+- Ids are integers (`"id": 7`)
 - Times in ISO 8601 UTC, like `2026-11-20T18:30:00Z`
-- Errors look like `{ "error": "movie not found" }` with the right status code
+- Fixed values are lowercase strings, like roles `user` and `admin` or status `pending`, `paid` and `cancelled`
+- Errors look like `{ "error": "movie not found" }` with the right status code, short lowercase message. Also for bad bodies, bad path or query values and unknown paths
+- Lists with pages use `page` (starts at 1) and `pageSize` (default 20, max 100), other values give 400. The answer is `{ "items": [], "page": 1, "pageSize": 20, "total": 0 }`
+- Header names keep the normal style: `Authorization: Bearer <token>`, `X-User-Id`, `X-User-Role`
+
+Rust example (`backend/users/src/models/requests.rs`), it reads `{ "oldPassword": "...", "newPassword": "..." }`:
+
+```rust
+#[derive(Deserialize, ToSchema, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangePasswordRequest {
+    pub old_password: String,
+    pub new_password: String,
+}
+```
 
 ## Running
 
