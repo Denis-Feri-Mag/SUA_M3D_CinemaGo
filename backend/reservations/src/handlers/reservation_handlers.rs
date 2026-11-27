@@ -1,4 +1,4 @@
-// Controllers only read the request (path, query, body, logged in user),
+// Handlers only read the request (path, query, body, logged in user),
 // call the service and turn the result into an HTTP response.
 
 use axum::extract::rejection::QueryRejection;
