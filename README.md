@@ -23,17 +23,17 @@ Your service reaches the others and its database on `localhost` with their dev p
 
 ## Services
 
-| Service                | Folder                | Port | Owner    | Git user |
-|------------------------|-----------------------|------|----------|----------|
-| users                  | backend/users         | 8081 | Denis    | TBD      |
-| movies                 | backend/movies        | 8082 | Marija   | TBD      |
-| screenings             | backend/screenings    | 8083 | Matea    | TBD      |
-| reservations           | backend/reservations  | 8084 | Denis    | TBD      |
-| payments               | backend/payments      | 8085 | Matea    | TBD      |
-| reviews                | backend/reviews       | 8086 | Mila     | TBD      |
-| notifications          | backend/notifications | 8087 | Mila     | TBD      |
-| frontend               | frontend              | TBD  | Marija   | TBD      |
-| gateway, docs, compose |                       |      | everyone | everyone |
+| Service                | Folder                | Framework   | Port | Owner    | Git user |
+|------------------------|-----------------------|-------------|------|----------|----------|
+| users                  | backend/users         | Rust (axum) | 8081 | Denis    | TBD      |
+| movies                 | backend/movies        | TBD         | 8082 | Marija   | TBD      |
+| screenings             | backend/screenings    | TBD         | 8083 | Matea    | TBD      |
+| reservations           | backend/reservations  | TBD         | 8084 | Denis    | TBD      |
+| payments               | backend/payments      | TBD         | 8085 | Matea    | TBD      |
+| reviews                | backend/reviews       | TBD         | 8086 | Mila     | TBD      |
+| notifications          | backend/notifications | TBD         | 8087 | Mila     | TBD      |
+| frontend               | frontend              | TBD         | TBD  | Marija   | TBD      |
+| gateway, docs, compose |                       | Traefik v3  |      | everyone | everyone |
 
 More info is in [docs/CONVENTIONS.md](docs/CONVENTIONS.md) and in each service's own README.
 

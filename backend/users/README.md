@@ -23,35 +23,39 @@ Copy-Item .env.example .env
 cargo run
 ```
 
-The table is created on startup.
+The tables are created on startup.
 
 ## Code layout
 
-- `src/main.rs` starts the service, `src/config.rs` reads env variables
+- `src/main.rs` starts the service, `src/config.rs` reads env variables, `src/state.rs` shared state
 - `src/routes.rs` router, `src/openapi.rs` Swagger spec
-- `src/handlers/` endpoint handlers
-- `src/models/` database struct, requests and responses
-- `src/db/` connection pool, table creation and SQL queries
-- `src/auth/` passwords, JWT and the logged in user check
+- `src/handlers/` endpoint handlers (auth, users, health)
+- `src/models/` database struct, requests (with validation rules) and responses
+- `src/db/` connection pool, table creation, SQL queries and the admin seed
+- `src/auth/` passwords, JWT, refresh tokens and the logged in user check
 - `src/cache/` Valkey cache for users
-- `src/clients/` calls to other services
+- `src/clients/` calls to other services (notifications)
+- `src/errors.rs` JSON errors, `src/extractors.rs` JSON errors for bad bodies and paths
+- `src/rate_limit.rs` rate limit for register, login and refresh
+- `src/endpoint_tests.rs` endpoint tests
 
 ## Env variables
 
-| Name                 | What it is                                       |
-|----------------------|--------------------------------------------------|
-| PORT                 | Port the service listens on                      |
-| DB_URL               | Postgres connection string for m3d_users         |
-| JWT_SECRET           | Secret used to sign tokens                       |
-| NOTIFICATIONS_URL    | Base URL of the notifications service            |
-| ACCESS_TOKEN_MINUTES | How long an access token lasts (default 15)      |
-| CACHE_URL            | Valkey address, like `redis://localhost:6379`    |
-| CACHE_TTL_SECONDS    | How long a user stays in the cache (default 300) |
-| ADMIN_EMAIL          | Admin created on start if it does not exist      |
-| ADMIN_PASSWORD       | Password for that admin (empty = no admin)       |
-| RUST_LOG             | Log level (default `info,sqlx=warn`)             |
-| RATE_LIMIT_REQUESTS  | Max auth calls per IP in the window (default 10, 0 = off) |
-| RATE_LIMIT_WINDOW_SECONDS | Length of the rate limit window (default 60) |
+| Name                      | What it is                                                   |
+|---------------------------|--------------------------------------------------------------|
+| PORT                      | Port the service listens on (default 8080)                   |
+| DB_URL                    | Postgres connection string for m3d_users (required)          |
+| JWT_SECRET                | Secret used to sign tokens (required, the service stops without it) |
+| NOTIFICATIONS_URL         | Base URL of the notifications service                        |
+| ACCESS_TOKEN_MINUTES      | How long an access token lasts (default 15)                  |
+| CACHE_URL                 | Valkey address, like `redis://localhost:6379`                |
+| CACHE_TTL_SECONDS         | How long a user stays in the cache (default 300)             |
+| ADMIN_EMAIL               | Admin created on start if it does not exist                  |
+| ADMIN_PASSWORD            | Password for that admin (empty = no admin)                   |
+| RATE_LIMIT_REQUESTS       | Max auth calls per IP and path in the window (default 10, 0 = off) |
+| RATE_LIMIT_WINDOW_SECONDS | Length of the rate limit window in seconds (default 60)      |
+| RUST_LOG                  | Log level (default `info,sqlx=warn`)                         |
+| TEST_DB_URL               | Only for the ignored database test, see Tests                |
 
 ## Endpoints
 
@@ -59,7 +63,7 @@ The table is created on startup.
 |--------|-----------------------|---------------|---------------------------------------|
 | GET    | /health               | no            | Health check                          |
 | GET    | /users                | admin         | List users, `?page=1&pageSize=20`     |
-| GET    | /users/{id}           | no            | Get one user                          |
+| GET    | /users/{id}           | see below     | Get one user                          |
 | GET    | /users/me             | any user      | The logged in user                    |
 | PUT    | /users/me             | any user      | Change your own name and email        |
 | POST   | /users/register       | no            | Create a user (201)                   |
@@ -73,6 +77,7 @@ The table is created on startup.
 | GET    | /auth/verify          | any user      | Token check used by Traefik           |
 
 Send the token as `Authorization: Bearer <token>`.
+`GET /users/{id}` needs no token when called directly (other services use `http://users:8080/users/{id}`), but through Traefik (`/api/users/{id}`) it needs a token like every other protected route.
 The access token lasts 15 minutes. When it expires, send `{ refreshToken }` to `/users/refresh`.
 Each refresh token works once and lasts 7 days. Only its sha256 hash is saved in the `refresh_tokens` table.
 Logout and deleting a user also remove the user's refresh tokens.
@@ -107,7 +112,7 @@ A bad value returns 400, for example `{ "error": "email: must be a valid email" 
 Users are cached in Valkey (`users-cache`) under the key `users:user:<id>` for `CACHE_TTL_SECONDS`.
 The cache is used by `GET /users/{id}` and by the token check on every protected request (`/auth/verify`).
 The cached data has no password hash.
-The key is deleted when the user is changed, gets a new role, is deleted or logs out.
+The key is deleted when the user is changed, gets a new role, changes the password, is deleted or logs out.
 If Valkey is not running, the service logs a warning and reads from the database.
 
 ## Calls to other services
