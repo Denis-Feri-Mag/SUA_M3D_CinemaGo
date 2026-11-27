@@ -310,3 +310,64 @@ async fn reservation_flow_with_database() {
     assert_eq!(status, StatusCode::OK);
     assert!(page["total"].as_i64().unwrap() >= 1);
 }
+
+// Two requests remove the two seats at the same time, one of them must get 409.
+// A race does not happen every time, so it runs a few rounds.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore]
+async fn removing_both_seats_at_once_keeps_one_with_database() {
+    let database_url = std::env::var("TEST_DB_URL").expect("TEST_DB_URL is not set");
+    let state = test_state(&database_url);
+    crate::db::create_tables(&state.pool).await;
+    let app = create_router(state);
+
+    let first_screening_id = (chrono::Utc::now().timestamp_micros() % 1_000_000_000) as i32 + 2000;
+    for round in 0..10 {
+        let create = user_request(
+            "POST",
+            "/reservations",
+            51,
+            "user",
+            Some(
+                json!({ "screeningId": first_screening_id + round, "seats": [{ "row": 1, "number": 1 }, { "row": 1, "number": 2 }] }),
+            ),
+        );
+        let (status, reservation) = send(app.clone(), create).await;
+        assert_eq!(status, StatusCode::CREATED);
+        let reservation_id = reservation["id"].as_i64().unwrap();
+        let first_seat_id = reservation["seats"][0]["id"].as_i64().unwrap();
+        let second_seat_id = reservation["seats"][1]["id"].as_i64().unwrap();
+
+        let remove_first = user_request(
+            "DELETE",
+            &format!("/reservations/{reservation_id}/seats/{first_seat_id}"),
+            51,
+            "user",
+            None,
+        );
+        let remove_second = user_request(
+            "DELETE",
+            &format!("/reservations/{reservation_id}/seats/{second_seat_id}"),
+            51,
+            "user",
+            None,
+        );
+        let ((first_status, _), (second_status, _)) = tokio::join!(
+            send(app.clone(), remove_first),
+            send(app.clone(), remove_second)
+        );
+        let mut statuses = [first_status, second_status];
+        statuses.sort();
+        assert_eq!(statuses, [StatusCode::NO_CONTENT, StatusCode::CONFLICT]);
+
+        let get = user_request(
+            "GET",
+            &format!("/reservations/{reservation_id}"),
+            51,
+            "user",
+            None,
+        );
+        let (_, reservation) = send(app.clone(), get).await;
+        assert_eq!(reservation["seats"].as_array().unwrap().len(), 1);
+    }
+}
