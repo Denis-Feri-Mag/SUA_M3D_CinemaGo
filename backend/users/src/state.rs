@@ -5,7 +5,7 @@ use sqlx::PgPool;
 
 use crate::rate_limit::RateLimiter;
 
-// Shared by all handlers
+// Shared by all controllers and services
 #[derive(Clone)]
 pub struct AppState {
     pub pool: PgPool,

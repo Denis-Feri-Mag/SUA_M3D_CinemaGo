@@ -1,15 +1,16 @@
+// Controllers only read the request (path, query, body, logged in user),
+// call the service and turn the result into an HTTP response.
+
 use axum::extract::rejection::QueryRejection;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
-use validator::Validate;
 
 use crate::auth::current_user;
-use crate::cache::user_cache;
-use crate::db::user_queries;
 use crate::errors::ApiError;
 use crate::extractors::{Json, Path};
 use crate::models::requests::{PageQuery, UpdateRoleRequest, UpdateUserRequest};
 use crate::models::responses::{ErrorResponse, UserPage, UserResponse};
+use crate::services::user_service;
 use crate::state::AppState;
 
 #[utoipa::path(
@@ -38,33 +39,11 @@ pub async fn get_users(
     query: Result<Query<PageQuery>, QueryRejection>,
 ) -> Result<Json<UserPage>, ApiError> {
     let logged_in_user = current_user::get_logged_in_user(&headers, &state).await?;
-    if logged_in_user.role != "admin" {
-        return Err(ApiError::forbidden());
-    }
-
-    let Query(page_query) = query?;
-    let page = page_query.page.unwrap_or(1);
-    let page_size = page_query.page_size.unwrap_or(20);
-    if page < 1 || !(1..=100).contains(&page_size) {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "page must be at least 1 and pageSize 1 to 100",
-        ));
-    }
-
-    let offset = (page - 1) * page_size;
-    let users = user_queries::get_users_page(&state.pool, page_size, offset).await?;
-    let total = user_queries::count_users(&state.pool).await?;
-    let mut user_list = Vec::new();
-    for user in users {
-        user_list.push(user.to_response());
-    }
-    Ok(Json(UserPage {
-        items: user_list,
-        page,
-        page_size,
-        total,
-    }))
+    let page_query = query
+        .map(|Query(page_query)| page_query)
+        .map_err(ApiError::from);
+    let user_page = user_service::list_users(&state, &logged_in_user, page_query).await?;
+    Ok(Json(user_page))
 }
 
 #[utoipa::path(
@@ -88,11 +67,8 @@ pub async fn get_user(
     State(state): State<AppState>,
     Path(user_id): Path<i32>,
 ) -> Result<Json<UserResponse>, ApiError> {
-    // No token needed, other services use this to check a user exists
-    let user = user_cache::find_user(&state, user_id)
-        .await?
-        .ok_or(ApiError::not_found())?;
-    Ok(Json(user.to_response()))
+    let user = user_service::get_user(&state, user_id).await?;
+    Ok(Json(user))
 }
 
 #[utoipa::path(
@@ -130,20 +106,8 @@ pub async fn update_user(
     Json(request): Json<UpdateUserRequest>,
 ) -> Result<Json<UserResponse>, ApiError> {
     let logged_in_user = current_user::get_logged_in_user(&headers, &state).await?;
-    current_user::check_self_or_admin(&logged_in_user, user_id)?;
-
-    request.validate()?;
-    let name = request.name.trim();
-    let email = request.email.trim().to_lowercase();
-    if name.is_empty() {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "name: is required"));
-    }
-
-    let user = user_queries::update_user(&state.pool, user_id, name, &email)
-        .await?
-        .ok_or(ApiError::not_found())?;
-    user_cache::remove_user(&state, user_id).await;
-    Ok(Json(user.to_response()))
+    let user = user_service::update_user(&state, &logged_in_user, user_id, request).await?;
+    Ok(Json(user))
 }
 
 #[utoipa::path(
@@ -179,26 +143,8 @@ pub async fn update_role(
     Json(request): Json<UpdateRoleRequest>,
 ) -> Result<Json<UserResponse>, ApiError> {
     let logged_in_user = current_user::get_logged_in_user(&headers, &state).await?;
-    if logged_in_user.role != "admin" {
-        return Err(ApiError::forbidden());
-    }
-
-    if request.role != "user" && request.role != "admin" {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "role must be user or admin",
-        ));
-    }
-
-    if request.role == "user" {
-        check_not_last_admin(&state, user_id).await?;
-    }
-
-    let user = user_queries::update_role(&state.pool, user_id, &request.role)
-        .await?
-        .ok_or(ApiError::not_found())?;
-    user_cache::remove_user(&state, user_id).await;
-    Ok(Json(user.to_response()))
+    let user = user_service::update_role(&state, &logged_in_user, user_id, request).await?;
+    Ok(Json(user))
 }
 
 #[utoipa::path(
@@ -227,15 +173,7 @@ pub async fn delete_user(
     Path(user_id): Path<i32>,
 ) -> Result<StatusCode, ApiError> {
     let logged_in_user = current_user::get_logged_in_user(&headers, &state).await?;
-    current_user::check_self_or_admin(&logged_in_user, user_id)?;
-
-    check_not_last_admin(&state, user_id).await?;
-
-    let was_deleted = user_queries::delete_user(&state.pool, user_id).await?;
-    user_cache::remove_user(&state, user_id).await;
-    if !was_deleted {
-        return Err(ApiError::not_found());
-    }
+    user_service::delete_user(&state, &logged_in_user, user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -291,32 +229,6 @@ pub async fn update_me(
     Json(request): Json<UpdateUserRequest>,
 ) -> Result<Json<UserResponse>, ApiError> {
     let logged_in_user = current_user::get_logged_in_user(&headers, &state).await?;
-
-    request.validate()?;
-    let name = request.name.trim();
-    let email = request.email.trim().to_lowercase();
-    if name.is_empty() {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "name: is required"));
-    }
-
-    let user = user_queries::update_user(&state.pool, logged_in_user.id, name, &email)
-        .await?
-        .ok_or(ApiError::not_found())?;
-    user_cache::remove_user(&state, logged_in_user.id).await;
-    Ok(Json(user.to_response()))
-}
-
-// The app always needs one admin, so the last one cannot be deleted or made a normal user
-async fn check_not_last_admin(state: &AppState, user_id: i32) -> Result<(), ApiError> {
-    let user = match user_queries::get_user_by_id(&state.pool, user_id).await? {
-        Some(user) => user,
-        None => return Ok(()),
-    };
-    if user.role == "admin" && user_queries::count_admins(&state.pool).await? <= 1 {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            "cannot remove the last admin",
-        ));
-    }
-    Ok(())
+    let user = user_service::update_me(&state, &logged_in_user, request).await?;
+    Ok(Json(user))
 }

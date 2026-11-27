@@ -4,6 +4,9 @@ use sqlx::FromRow;
 
 use crate::models::responses::UserResponse;
 
+pub const ROLE_ADMIN: &str = "admin";
+pub const ROLE_USER: &str = "user";
+
 // One row from the users table
 #[derive(FromRow)]
 pub struct UserRow {

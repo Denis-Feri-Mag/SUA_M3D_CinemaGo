@@ -17,7 +17,7 @@ pub struct Json<T>(pub T);
 #[from_request(via(axum::extract::Path), rejection(ApiError))]
 pub struct Path<T>(pub T);
 
-// So handlers can also return Json(...) as before
+// So controllers can also return Json(...) as before
 impl<T: Serialize> IntoResponse for Json<T> {
     fn into_response(self) -> Response {
         axum::Json(self.0).into_response()
