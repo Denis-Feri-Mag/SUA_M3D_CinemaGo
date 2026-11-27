@@ -27,9 +27,9 @@ The tables are created on startup.
 
 ## Code layout
 
-The code is split in layers, a bit like NestJS: handler -> service -> repository.
+The code is split in layers, a bit like NestJS: controller -> service -> repository.
 
-- `src/handlers/` read the request (path, query, body, logged in user), call the service and return the HTTP status and JSON. The Swagger docs are on these functions.
+- `src/controllers/` read the request (path, query, body, logged in user), call the service and return the HTTP status and JSON. The Swagger docs are on these functions.
 - `src/services/reservation_service.rs` business rules: who can see or change a reservation, page limits, pending only, last seat, the screenings check and cancel. Changes run in one transaction.
 - `src/db/` data layer: table creation and the SQL queries (`reservation_repository.rs`), no rules here
 - `src/models/` database rows and status values, requests (with validation rules, also the seat rules) and responses
