@@ -28,7 +28,7 @@ Your service reaches the others and its database on `localhost` with their dev p
 | users                  | backend/users         | Rust (axum) | 8081 | Denis    | TBD      |
 | movies                 | backend/movies        | TBD         | 8082 | Marija   | TBD      |
 | screenings             | backend/screenings    | TBD         | 8083 | Matea    | TBD      |
-| reservations           | backend/reservations  | TBD         | 8084 | Denis    | TBD      |
+| reservations           | backend/reservations  | Rust (axum) | 8084 | Denis    | TBD      |
 | payments               | backend/payments      | TBD         | 8085 | Matea    | TBD      |
 | reviews                | backend/reviews       | TBD         | 8086 | Mila     | TBD      |
 | notifications          | backend/notifications | TBD         | 8087 | Mila     | TBD      |

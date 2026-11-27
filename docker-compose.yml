@@ -189,44 +189,56 @@ services:
   #   networks:
   #     - screenings-db-net
 
-  # ---- reservations (uncomment when the service exists) ----
-  # reservations:
-  #   build: ./backend/reservations
-  #   environment:
-  #     PORT: 8080
-  #     DB_URL: postgres://m3d_reservations:${RESERVATIONS_DB_PASSWORD}@reservations-db:5432/m3d_reservations
-  #     SCREENINGS_URL: ${SCREENINGS_URL:-http://screenings:8080}
-  #   depends_on:
-  #     reservations-db:
-  #       condition: service_healthy
-  #   networks:
-  #     - backend
-  #     - reservations-db-net
-  #   labels:
-  #     - traefik.enable=true
-  #     - traefik.http.services.reservations.loadbalancer.server.port=8080
-  #     # Protected: everything under /api/reservations
-  #     - traefik.http.routers.reservations.rule=PathPrefix(`/api/reservations`)
-  #     - traefik.http.routers.reservations.middlewares=auth@file,strip-api@file
-  #     # Public: health and swagger, /api/reservations/docs/ becomes /docs/
-  #     - traefik.http.routers.reservations-docs.rule=Path(`/api/reservations/health`) || PathPrefix(`/api/reservations/docs`) || Path(`/api/reservations/openapi.json`)
-  #     - traefik.http.routers.reservations-docs.middlewares=reservations-strip
-  #     - traefik.http.middlewares.reservations-strip.stripprefix.prefixes=/api/reservations
+  reservations:
+    build: ./backend/reservations
+    restart: unless-stopped
+    environment:
+      PORT: 8080
+      DB_URL: postgres://m3d_reservations:${RESERVATIONS_DB_PASSWORD}@reservations-db:5432/m3d_reservations
+      SCREENINGS_URL: ${SCREENINGS_URL:-http://screenings:8080}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      reservations-db:
+        condition: service_healthy
+    networks:
+      - backend
+      - reservations-db-net
+    labels:
+      - traefik.enable=true
+      - traefik.http.services.reservations.loadbalancer.server.port=8080
 
-  # reservations-db:
-  #   image: postgres:16-alpine
-  #   environment:
-  #     POSTGRES_DB: m3d_reservations
-  #     POSTGRES_USER: m3d_reservations
-  #     POSTGRES_PASSWORD: ${RESERVATIONS_DB_PASSWORD}
-  #   volumes:
-  #     - reservations-data:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U m3d_reservations -d m3d_reservations"]
-  #     interval: 5s
-  #     retries: 10
-  #   networks:
-  #     - reservations-db-net
+      # Protected: everything else under /api/reservations
+      - traefik.http.routers.reservations.rule=PathPrefix(`/api/reservations`)
+      - traefik.http.routers.reservations.middlewares=auth@file,strip-api@file
+
+      # Public: taken seats of a screening
+      - traefik.http.routers.reservations-public.rule=Method(`GET`) && PathRegexp(`^/api/reservations/screenings/[0-9]+/seats$$`)
+      - traefik.http.routers.reservations-public.middlewares=strip-api@file
+
+      # Public: health and swagger, /api/reservations/docs/ becomes /docs/
+      - traefik.http.routers.reservations-docs.rule=Path(`/api/reservations/health`) || PathPrefix(`/api/reservations/docs`) || Path(`/api/reservations/openapi.json`)
+      - traefik.http.routers.reservations-docs.middlewares=reservations-strip
+      - traefik.http.middlewares.reservations-strip.stripprefix.prefixes=/api/reservations
+
+  reservations-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: m3d_reservations
+      POSTGRES_USER: m3d_reservations
+      POSTGRES_PASSWORD: ${RESERVATIONS_DB_PASSWORD}
+    volumes:
+      - reservations-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U m3d_reservations -d m3d_reservations"]
+      interval: 5s
+      retries: 10
+    networks:
+      - reservations-db-net
 
   # ---- payments (uncomment when the service exists) ----
   # payments:
@@ -374,9 +386,9 @@ services:
       # screenings:
       #   condition: service_started
       #   required: false
-      # reservations:
-      #   condition: service_started
-      #   required: false
+      reservations:
+        condition: service_healthy
+        required: false
       # payments:
       #   condition: service_started
       #   required: false
@@ -399,8 +411,8 @@ networks:
   #   internal: true
   # screenings-db-net:
   #   internal: true
-  # reservations-db-net:
-  #   internal: true
+  reservations-db-net:
+    internal: true
   # payments-db-net:
   #   internal: true
   # reviews-db-net:
@@ -412,7 +424,7 @@ volumes:
   users-data:
   # movies-data:
   # screenings-data:
-  # reservations-data:
+  reservations-data:
   # payments-data:
   # reviews-data:
   # notifications-data:

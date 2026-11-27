@@ -25,6 +25,7 @@ public_rule() {
   case "$1" in
     users) printf 'Path(`/api/users/register`) || Path(`/api/users/login`) || Path(`/api/users/refresh`)' ;;
     movies|screenings|reviews) printf 'Method(`GET`) && PathPrefix(`/api/%s`)' "$1" ;;
+    reservations) printf 'Method(`GET`) && PathRegexp(`^/api/reservations/screenings/[0-9]+/seats$`)' ;;
     *) printf '' ;;
   esac
 }
