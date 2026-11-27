@@ -27,15 +27,21 @@ The tables are created on startup.
 
 ## Code layout
 
-- `src/main.rs` starts the service, `src/config.rs` reads env variables, `src/state.rs` shared state
-- `src/routes.rs` router, `src/openapi.rs` Swagger spec
-- `src/handlers/` endpoint handlers (reservations, health)
-- `src/models/` database structs, requests (with validation rules) and responses
-- `src/db/` connection pool, table creation and SQL queries
-- `src/auth/` reads the logged in user from the headers Traefik sets
+The code is split in layers, a bit like NestJS: controller -> service -> repository.
+
+- `src/controllers/` read the request (path, query, body, logged in user), call the service and return the HTTP status and JSON. The Swagger docs are on these functions.
+- `src/services/reservation_service.rs` business rules: who can see or change a reservation, page limits, pending only, last seat, the screenings check and cancel. Changes run in one transaction.
+- `src/db/` data layer: table creation and the SQL queries (`reservation_repository.rs`), no rules here
+- `src/models/` database rows and status values, requests (with validation rules, also the seat rules) and responses
+- `src/auth/` reads the logged in user from the headers Traefik sets (`CurrentUser`)
 - `src/clients/` calls to other services (screenings)
+- `src/main.rs` starts the service, `src/config.rs` env variables, `src/state.rs` shared state
+- `src/routes.rs` router, `src/openapi.rs` Swagger spec
 - `src/errors.rs` JSON errors, `src/extractors.rs` JSON errors for bad bodies and paths
 - `src/endpoint_tests.rs` endpoint tests
+
+Paid or cancelled reservations cannot be changed. The check is done in the same SQL update that locks the reservation,
+so two requests at the same time cannot both change it (for example remove the last two seats).
 
 ## Env variables
 
@@ -45,7 +51,7 @@ The tables are created on startup.
 | DB_URL         | Postgres connection string for m3d_reservations (required) |
 | SCREENINGS_URL | Base URL of the screenings service                         |
 | RUST_LOG       | Log level (default `info,sqlx=warn`)                       |
-| TEST_DB_URL    | Only for the ignored database test, see Tests              |
+| TEST_DB_URL    | Only for the ignored database tests, see Tests             |
 
 ## Tables
 
@@ -104,8 +110,8 @@ If screenings is not running, it only logs a warning and the booking still works
 cargo test
 ```
 
-Unit tests cover the seat checks and the user headers. Endpoint tests in `src/endpoint_tests.rs` call the router directly and do not need a database.
-One test needs the dev database (start it with the dev menu first):
+Unit tests cover the seat rules, the user headers and the access rules in the service. Endpoint tests in `src/endpoint_tests.rs` call the router directly and do not need a database.
+Two tests need the dev database (start it with the dev menu first):
 
 ```powershell
 $env:TEST_DB_URL = "postgres://m3d_reservations:changeme@localhost:5435/m3d_reservations"
